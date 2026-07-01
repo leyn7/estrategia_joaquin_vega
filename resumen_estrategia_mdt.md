@@ -212,3 +212,19 @@ Una vez que el precio confirma la ruptura con la regla del tercio, el análisis 
 - **Gatillo (Sin Entrada Agresiva):** En este patrón no existe entrada agresiva. El algoritmo simplemente debe esperar el retroceso natural del precio hacia la **zona del 61.8%** de este nuevo Fibo de seguimiento. En el instante en que el precio toca el 61.8%, se ejecuta la entrada a mercado.
 - **Stop Loss Estructural:** El SL se coloca inmediatamente por encima (en ventas) o por debajo (en compras) de la **máxima dilatación (la mecha absoluta del inicio del impulso)**. 
 - **La Muerte del Patrón:** El precio tiene estrictamente prohibido volver a tocar esa máxima dilatación original. Si el mercado retrocede tan profundo que vuelve a testear esa mecha base, el patrón de Doble Suelo/Techo se considera roto y se debe buscar un nuevo análisis.
+
+## 19. Concurrencia de Zonas (Superposición de Ciclos)
+Al trabajar con más de un ciclo (ej. un Ciclo Mayor Macro y un Ciclo Menor o Sub-ciclo), es muy común que sus zonas operativas se superpongan. A esto se le llama **Concurrencia**. Las reglas de concurrencia **solo aplican a zonas de la misma dirección** (ej. Compras con Compras, o Ventas con Ventas). La regla de oro es: **La Zona Mayor siempre manda**. Existen 3 tipos de concurrencias:
+
+### Caso 1: Inmersión Total (La más simple)
+- **Escenario:** La Zona Menor (del sub-ciclo) está **completamente inmersa** (metida por completo) dentro de la Zona Mayor (del ciclo macro).
+- **Regla:** La Zona Menor desaparece y se elimina automáticamente. NO se buscan patrones basándose en la medida de la Zona Menor. Todo patrón y gestión se trabaja usando exclusivamente los límites de la Zona Mayor.
+
+### Caso 2: Ataque Frontal a Zona Menor (Zona Libre)
+- **Escenario:** El precio se acerca a la concurrencia y **primero ataca a la Zona Menor**, la cual se superpone parcialmente con la Zona Mayor que está más atrás.
+- **La Regla de la Mitad Libre:** La Zona Menor es útil y válida **SOLO SI** tiene "claramente" al menos **la mitad (50%) de su tamaño libre** antes de solaparse con la Zona Mayor.
+- **Acción:** Si tiene la mitad libre, se deja la Zona Menor como válida, **pero se acota (recorta)** exactamente en el límite donde empieza la Zona Mayor. Se buscan patrones en ese espacio libre. Si NO tiene al menos la mitad de su tamaño libre, la Zona Menor se elimina y solo queda la Zona Mayor.
+
+### Caso 3: El Sándwich (Ataque a Zona Mayor)
+- **Escenario:** El precio se acerca a la concurrencia y **primero ataca a la Zona Mayor**. La Zona Menor está escondida o solapada en la parte de atrás de la Zona Mayor (como un sándwich).
+- **Regla Estricta:** La Zona Menor **JAMÁS SIRVE** en este escenario. Directamente se elimina del gráfico y toda la operativa se centra exclusivamente en la Zona Mayor.
