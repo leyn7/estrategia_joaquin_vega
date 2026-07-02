@@ -237,3 +237,7 @@ Al trabajar con más de un ciclo (ej. un Ciclo Mayor Macro y un Ciclo Menor o Su
 ### Caso 3: El Sándwich (Ataque a Zona Mayor)
 - **Escenario:** El precio se acerca a la concurrencia y **primero ataca a la Zona Mayor**. La Zona Menor está escondida o solapada en la parte de atrás de la Zona Mayor (como un sándwich).
 - **Regla Estricta:** La Zona Menor **JAMÁS SIRVE** en este escenario. Directamente se elimina del gráfico y toda la operativa se centra exclusivamente en la Zona Mayor.
+
+---
+*Nota Técnica Futura (Para Desarrollo del Bot):* 
+Actualmente, las Zonas en Evolución o Alertas No Activadas (Caso 3 o Dibujo Lotoso) no están pasando por el filtro de concurrencia. Un punto de control que esté demasiado cerca del origen de un ciclo anterior (ej. muy pegado a un Reset del 61.8%) arrojará alertas cuyas zonas futuras estarán totalmente inmersas o en sándwich. **Se debe abordar en el futuro la limpieza de estas alertas inútiles** mediante concurrencia predictiva, para evitar ruido visual en el mapeo algorítmico, ya que el precio nunca podría operarlas de forma limpia.
