@@ -173,15 +173,24 @@ Si el Patrón de Segundo Engaño (que ya era proporcional y válido) fracasa y e
 ## 16. El Patrón de Entrada Profunda (Pauta 3 Corta)
 Habrá escenarios donde el precio entra de una forma tan agresiva a la zona de trabajo que imposibilita matemáticamente la formación de un patrón de engaño válido.
 
+### Requisito de Contexto: La Llegada Profunda (OBLIGATORIO)
+La Entrada Profunda SOLO existe si el precio efectivamente **entró profundamente en la zona**:
+- El precio debe haber **superado los niveles de engaño que se estaban midiendo (el 138.2% Y el 161.8%)**, pasándose de largo la Zona de Engaños ("patrón incompleto": no se rompió, simplemente nunca existió — NO consume el contador de engaños), y
+- Debe haber llegado **más allá de la mitad de la zona** de decisión (proporcionalidad de llegada).
+Tras esa entrada profunda, se espera una **nueva Pauta 2** y se mide con el fibo de seguimiento.
+
 ### Invalidación del Engaño por Límite de Zona
-Cuando el precio entra muy profundo en la caja y hace una Pauta 2 (rechazo), el bot traza el Fibo de Entrada para buscar el patrón de Primer Engaño. 
+Con la llegada profunda confirmada, al medir la nueva Pauta 2 el bot proyecta la Zona de Engaños para buscar el patrón de Primer Engaño (sigue siendo "primer" engaño: el incompleto no cuenta).
 - **La Regla de Exclusión:** Si al proyectar la Zona de Engaños, **al menos UNO de los niveles (ej. el 161.8%) se proyecta FUERA de los límites de la Zona de Decisión** (o queda exactamente al ras del límite macro), ese nivel de engaño NO SIRVE.
-- Bastaría con que solo el 161.8% quede fuera del límite de la zona para que el engaño se descarte por completo. Automáticamente, el algoritmo cambia de estrategia operativa.
+- Bastaría con que solo el 161.8% quede fuera del límite de la zona para que el engaño se descarte por completo. Automáticamente, el algoritmo cambia de estrategia operativa. El cambio es **irreversible**: da igual cuánto siga profundizando la Pauta 2.
+- **OJO — Sin llegada profunda NO hay Entrada Profunda:** si los niveles proyectados escapan de la zona pero la estructura NUNCA superó la mitad de la zona (llegada tímida), no se muta a Entrada Profunda: **no existe patrón alguno**. La estructura se descarta y se espera una nueva Pauta 1 dentro de la zona (sin consumir el contador de engaños). *(Caso real: 2 jul 2026, zona 565.14–573.74, llegada 567.77 < mitad 569.44 con P2 gigante — inoperable.)*
 
 ### Mecánica de la Entrada Profunda (Pauta 3 Corta)
 Al descartar el engaño, pasamos a operar lo que se conoce como **Patrón de Entrada Profunda en Zona**.
 - **Cambio de Foco:** Ya no nos interesan los niveles de extensión 138.2/161.8. En su lugar, el mismo Fibo con el que estábamos midiendo la Pauta 2 se utilizará exclusivamente para buscar un retroceso interno.
 - **Gatillo de Entrada (La Pauta 3 Corta):** El algoritmo ahora solo espera a que el precio haga un retroceso (Pauta 3 Corta) hacia la **Zona del 61.8%** de ese mismo Fibo. En el instante en que el precio toca el 61.8%, se ejecuta la entrada a mercado. (No existe opción de entrada agresiva en este patrón, siempre se espera al retroceso).
+- **La Zona del 61.8 es una ZONA, no un nivel:** igual que la Zona Media de los ciclos, va del **61.8% al 80.9%** del impulso, medida desde el extremo del impulso hacia el origen ("es como si fuera nuestro fibo de seguimiento habitual"). La entrada se ejecuta al toque del 61.8; el límite exterior (80.9) es la frontera de gestión.
+- **Fibo dinámico:** mientras la Pauta 2 siga dejando nuevos extremos, el Fibo (y por tanto la Zona del 61.8) se sigue actualizando.
 - **Stop Loss:** El Stop Loss estructural se coloca inmediatamente por encima (ventas) o por debajo (compras) del punto extremo más profundo que haya dejado el precio en la zona antes de iniciar el retroceso.
 
 ### Gestión Inmediata (La Regla del Milímetro)
