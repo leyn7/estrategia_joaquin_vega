@@ -68,7 +68,11 @@ def apply_concurrency(z_mayor, z_menor, buy_or_sell):
         imen, fmen = max(z_menor), min(z_menor)
         
         if imen <= imay and fmen >= fmay: return None, "Caso 1 (Inmersión Total)"
-        if imay >= imen: return None, "Caso 3 (Sándwich)"
+        if imay >= imen:
+            # Menor por detrás de la mayor: solo hay concurrencia si se superponen (o se tocan).
+            # Zonas completamente separadas de la misma dirección conviven (no es sándwich).
+            if imen >= fmay: return None, "Caso 3 (Sándwich)"
+            return z_menor, "Sin Concurrencia (zonas separadas)"
         # Aquí siempre imen > imay (complemento del Caso 3)
         if fmen >= imay: return z_menor, "Sin Concurrencia"
         free = imen - imay
@@ -80,7 +84,10 @@ def apply_concurrency(z_mayor, z_menor, buy_or_sell):
         imen, fmen = min(z_menor), max(z_menor)
         
         if imen >= imay and fmen <= fmay: return None, "Caso 1 (Inmersión Total)"
-        if imay <= imen: return None, "Caso 3 (Sándwich)"
+        if imay <= imen:
+            # Menor por detrás de la mayor: solo hay concurrencia si se superponen (o se tocan).
+            if imen <= fmay: return None, "Caso 3 (Sándwich)"
+            return z_menor, "Sin Concurrencia (zonas separadas)"
         # Aquí siempre imen < imay (complemento del Caso 3)
         if fmen <= imay: return z_menor, "Sin Concurrencia"
         free = imay - imen

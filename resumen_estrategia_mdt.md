@@ -234,6 +234,8 @@ Una vez que el precio confirma la ruptura con la regla del tercio, el análisis 
 ## 19. Concurrencia de Zonas (Superposición de Ciclos)
 Al trabajar con más de un ciclo (ej. un Ciclo Mayor Macro y un Ciclo Menor o Sub-ciclo), es muy común que sus zonas operativas se superpongan. A esto se le llama **Concurrencia**. Las reglas de concurrencia **solo aplican a zonas de la misma dirección** (ej. Compras con Compras, o Ventas con Ventas). La regla de oro es: **La Zona Mayor siempre manda**. Existen 3 tipos de concurrencias:
 
+> **Precisión algorítmica:** la concurrencia existe únicamente cuando las zonas **se superponen o se tocan**. Dos zonas de la misma dirección completamente separadas (con espacio libre entre ellas) NO concurren: ambas conviven como zonas independientes del mapa (ej. la Zona Baja de un ciclo nunca es "sándwich" de su propia Zona Media, que está más arriba y no la toca).
+
 ### Caso 1: Inmersión Total (La más simple)
 - **Escenario:** La Zona Menor (del sub-ciclo) está **completamente inmersa** (metida por completo) dentro de la Zona Mayor (del ciclo macro).
 - **Regla:** La Zona Menor desaparece y se elimina automáticamente. NO se buscan patrones basándose en la medida de la Zona Menor. Todo patrón y gestión se trabaja usando exclusivamente los límites de la Zona Mayor.
