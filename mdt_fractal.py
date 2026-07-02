@@ -30,7 +30,7 @@ def get_bullish_poc(df, start_idx, end_idx):
                     min_low_idx = j
                     
                 drop = max_seen - min_low_since_max
-                if drop > 0 and min_low_idx != -1:
+                if drop > 0:
                     swings.append({
                         'peak': max_seen,
                         'trough': min_low_since_max,
@@ -96,7 +96,7 @@ def get_bearish_poc(df, start_idx, end_idx):
                     max_high_idx = j
                     
                 bounce = max_high_since_min - min_seen
-                if bounce > 0 and max_high_idx != -1:
+                if bounce > 0:
                     swings.append({
                         'peak': max_high_since_min,
                         'trough': min_seen,

@@ -69,11 +69,11 @@ def apply_concurrency(z_mayor, z_menor, buy_or_sell):
         
         if imen <= imay and fmen >= fmay: return None, "Caso 1 (Inmersión Total)"
         if imay >= imen: return None, "Caso 3 (Sándwich)"
-        if imen > imay:
-            if fmen >= imay: return z_menor, "Sin Concurrencia"
-            free = imen - imay
-            if free >= (imen - fmen)/2.0: return (imen, imay), f"Caso 2 (ACOTADA a {free:.2f})"
-            return None, "Caso 2 (ELIMINADA por falta de espacio)"
+        # Aquí siempre imen > imay (complemento del Caso 3)
+        if fmen >= imay: return z_menor, "Sin Concurrencia"
+        free = imen - imay
+        if free >= (imen - fmen)/2.0: return (imen, imay), f"Caso 2 (ACOTADA a {free:.2f})"
+        return None, "Caso 2 (ELIMINADA por falta de espacio)"
             
     else: # SELL: Ataca desde abajo
         imay, fmay = min(z_mayor), max(z_mayor)
@@ -81,11 +81,11 @@ def apply_concurrency(z_mayor, z_menor, buy_or_sell):
         
         if imen >= imay and fmen <= fmay: return None, "Caso 1 (Inmersión Total)"
         if imay <= imen: return None, "Caso 3 (Sándwich)"
-        if imen < imay:
-            if fmen <= imay: return z_menor, "Sin Concurrencia"
-            free = imay - imen
-            if free >= (fmen - imen)/2.0: return (imen, imay), f"Caso 2 (ACOTADA a {free:.2f})"
-            return None, "Caso 2 (ELIMINADA por falta de espacio)"
+        # Aquí siempre imen < imay (complemento del Caso 3)
+        if fmen <= imay: return z_menor, "Sin Concurrencia"
+        free = imay - imen
+        if free >= (fmen - imen)/2.0: return (imen, imay), f"Caso 2 (ACOTADA a {free:.2f})"
+        return None, "Caso 2 (ELIMINADA por falta de espacio)"
 
 def format_z(z):
     if z is None: return "ELIMINADA"

@@ -1,7 +1,6 @@
 import pandas as pd
 import requests
 import time
-from datetime import datetime
 
 def get_binance_klines(symbol="BNBUSDT", interval="1d", start_time=None):
     url = "https://fapi.binance.com/fapi/v1/klines"

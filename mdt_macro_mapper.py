@@ -1,8 +1,3 @@
-import pandas as pd
-import requests
-import time
-from datetime import datetime
-
 from mdt_data import get_binance_klines
 from mdt_math import calc_zones, get_active_zones, apply_concurrency, format_z
 from mdt_fractal import get_bullish_poc, get_bearish_poc
@@ -29,6 +24,7 @@ if __name__ == "__main__":
     
     buys = []
     sells = []
+    alerts = []
     
     # =========================================================================
     # RUTA ALCISTA
@@ -39,9 +35,12 @@ if __name__ == "__main__":
     print(f"[MACRO ALCISTA (1D)] Origen: {macro_bull['origen']:.2f} | Fin: {abs_max:.2f}")
     
     if not macro_bull_status["CYCLE_DEAD"]:
-        if macro_bull_status["BAJA"]: buys.append({"name": "Macro Alcista (Baja)", "z": macro_bull['BAJA'], "peso": 100})
-        if macro_bull_status["MEDIA"]: buys.append({"name": "Macro Alcista (Media)", "z": macro_bull['MEDIA'], "peso": 100})
-        if macro_bull_status["ALTA"]: sells.append({"name": "Macro Alcista (Alta)", "z": macro_bull['ALTA'], "peso": 100})
+        if macro_bull_status["ALTA"] or macro_bull_status["MEDIA"] or macro_bull_status["BAJA"]:
+            if macro_bull_status["BAJA"]: buys.append({"name": "Macro Alcista (Baja)", "z": macro_bull['BAJA'], "peso": 100})
+            if macro_bull_status["MEDIA"]: buys.append({"name": "Macro Alcista (Media)", "z": macro_bull['MEDIA'], "peso": 100})
+            if macro_bull_status["ALTA"]: sells.append({"name": "Macro Alcista (Alta)", "z": macro_bull['ALTA'], "peso": 100})
+        else:
+            alerts.append({"name": "Macro Alcista", "activacion": macro_bull['activacion'], "zona_alerta": macro_bull['MEDIA'], "tipo": "COMPRAS"})
 
     # Regla 61.8%
     lowest_post_ath = df_1d.loc[ath_idx:, 'low'].min()
@@ -60,9 +59,12 @@ if __name__ == "__main__":
         print(f"[SUB-C ALCISTA NIVEL 1 (1D)] Origen: {sub_bull['origen']:.2f} | Fin: {abs_max:.2f}")
         
         if not sub_bull_status["CYCLE_DEAD"]:
-            if sub_bull_status["BAJA"]: buys.append({"name": "Sub-C Alcista Nivel 1 (Baja)", "z": sub_bull['BAJA'], "peso": 99})
-            if sub_bull_status["MEDIA"]: buys.append({"name": "Sub-C Alcista Nivel 1 (Media)", "z": sub_bull['MEDIA'], "peso": 99})
-            if sub_bull_status["ALTA"]: sells.append({"name": "Sub-C Alcista Nivel 1 (Alta)", "z": sub_bull['ALTA'], "peso": 99})
+            if sub_bull_status["ALTA"] or sub_bull_status["MEDIA"] or sub_bull_status["BAJA"]:
+                if sub_bull_status["BAJA"]: buys.append({"name": "Sub-C Alcista Nivel 1 (Baja)", "z": sub_bull['BAJA'], "peso": 99})
+                if sub_bull_status["MEDIA"]: buys.append({"name": "Sub-C Alcista Nivel 1 (Media)", "z": sub_bull['MEDIA'], "peso": 99})
+                if sub_bull_status["ALTA"]: sells.append({"name": "Sub-C Alcista Nivel 1 (Alta)", "z": sub_bull['ALTA'], "peso": 99})
+            else:
+                alerts.append({"name": "Sub-C Alcista Nivel 1", "activacion": sub_bull['activacion'], "zona_alerta": sub_bull['MEDIA'], "tipo": "COMPRAS"})
             
         # ZOOM A 2H PARA EL RESTO (Si no se frenó en 1)
         if stop_bull_recursion_at > 1:
@@ -76,8 +78,6 @@ if __name__ == "__main__":
             
             # Recolectar POCs con Stack Monótono
             while current_search_idx_bull < ath_idx_bull:
-                if stop_bull_recursion_at <= 1: break
-                
                 poc_count = sum(1 for p in valid_pocs_bull if not p.get('is_boundary'))
                 if poc_count >= 2 and current_tf_bull == "2h":
                     switch_time = current_df_bull.loc[current_search_idx_bull, 'open_time']
@@ -112,7 +112,6 @@ if __name__ == "__main__":
                 
                 valid_pocs_bull.append(biggest_bull)
                 current_search_idx_bull = int(biggest_bull['trough_idx'])
-                if len(valid_pocs_bull) >= stop_bull_recursion_at - 1: break
                 
             # Procesar Zonas
             nivel_counter = 2
@@ -130,9 +129,12 @@ if __name__ == "__main__":
                 
                 if not sub_bull_status_2h["CYCLE_DEAD"]:
                     peso_actual = 100 - nivel_counter
-                    if sub_bull_status_2h["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": sub_bull_2h['BAJA'], "peso": peso_actual})
-                    if sub_bull_status_2h["MEDIA"]: buys.append({"name": f"{name} (Media)", "z": sub_bull_2h['MEDIA'], "peso": peso_actual})
-                    if sub_bull_status_2h["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": sub_bull_2h['ALTA'], "peso": peso_actual})
+                    if sub_bull_status_2h["ALTA"] or sub_bull_status_2h["MEDIA"] or sub_bull_status_2h["BAJA"]:
+                        if sub_bull_status_2h["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": sub_bull_2h['BAJA'], "peso": peso_actual})
+                        if sub_bull_status_2h["MEDIA"]: buys.append({"name": f"{name} (Media)", "z": sub_bull_2h['MEDIA'], "peso": peso_actual})
+                        if sub_bull_status_2h["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": sub_bull_2h['ALTA'], "peso": peso_actual})
+                    else:
+                        alerts.append({"name": name, "activacion": sub_bull_2h['activacion'], "zona_alerta": sub_bull_2h['MEDIA'], "tipo": "COMPRAS"})
                     
                 nivel_counter += 1
                 
@@ -145,9 +147,12 @@ if __name__ == "__main__":
     print(f"[MACRO BAJISTA (1D)] Origen: {abs_max:.2f} | Fin: {abs_min:.2f}")
     
     if not macro_bear_status["CYCLE_DEAD"]:
-        if macro_bear_status["BAJA"]: buys.append({"name": "Macro Bajista (Baja)", "z": macro_bear['BAJA'], "peso": 100})
-        if macro_bear_status["ALTA"]: sells.append({"name": "Macro Bajista (Alta)", "z": macro_bear['ALTA'], "peso": 100})
-        if macro_bear_status["MEDIA"]: sells.append({"name": "Macro Bajista (Media)", "z": macro_bear['MEDIA'], "peso": 100})
+        if macro_bear_status["ALTA"] or macro_bear_status["MEDIA"] or macro_bear_status["BAJA"]:
+            if macro_bear_status["BAJA"]: buys.append({"name": "Macro Bajista (Baja)", "z": macro_bear['BAJA'], "peso": 100})
+            if macro_bear_status["ALTA"]: sells.append({"name": "Macro Bajista (Alta)", "z": macro_bear['ALTA'], "peso": 100})
+            if macro_bear_status["MEDIA"]: sells.append({"name": "Macro Bajista (Media)", "z": macro_bear['MEDIA'], "peso": 100})
+        else:
+            alerts.append({"name": "Macro Bajista", "activacion": macro_bear['activacion'], "zona_alerta": macro_bear['MEDIA'], "tipo": "VENTAS"})
 
     highest_post_bottom = df_1d.loc[bottom_idx:, 'high'].max() if bottom_idx < len(df_1d)-1 else abs_min
     nivel_618_macro_bear = macro_bear['MEDIA'][1]
@@ -165,9 +170,12 @@ if __name__ == "__main__":
         print(f"[SUB-C BAJISTA NIVEL 1 (1D)] Origen: {sub_bear['origen']:.2f} | Fin: {abs_min:.2f}")
         
         if not sub_bear_status["CYCLE_DEAD"]:
-            if sub_bear_status["BAJA"]: buys.append({"name": "Sub-C Bajista Nivel 1 (Baja)", "z": sub_bear['BAJA'], "peso": 99})
-            if sub_bear_status["ALTA"]: sells.append({"name": "Sub-C Bajista Nivel 1 (Alta)", "z": sub_bear['ALTA'], "peso": 99})
-            if sub_bear_status["MEDIA"]: sells.append({"name": "Sub-C Bajista Nivel 1 (Media)", "z": sub_bear['MEDIA'], "peso": 99})
+            if sub_bear_status["ALTA"] or sub_bear_status["MEDIA"] or sub_bear_status["BAJA"]:
+                if sub_bear_status["BAJA"]: buys.append({"name": "Sub-C Bajista Nivel 1 (Baja)", "z": sub_bear['BAJA'], "peso": 99})
+                if sub_bear_status["ALTA"]: sells.append({"name": "Sub-C Bajista Nivel 1 (Alta)", "z": sub_bear['ALTA'], "peso": 99})
+                if sub_bear_status["MEDIA"]: sells.append({"name": "Sub-C Bajista Nivel 1 (Media)", "z": sub_bear['MEDIA'], "peso": 99})
+            else:
+                alerts.append({"name": "Sub-C Bajista Nivel 1", "activacion": sub_bear['activacion'], "zona_alerta": sub_bear['MEDIA'], "tipo": "VENTAS"})
             
         # ZOOM A 2H PARA EL RESTO
         if stop_bear_recursion_at > 1:
@@ -181,8 +189,6 @@ if __name__ == "__main__":
             
             # Recolectar POCs con Stack Monótono
             while current_search_idx_bear < bottom_idx_bear:
-                if stop_bear_recursion_at <= 1: break
-                
                 # Check hot-swap a 30m
                 poc_count = sum(1 for p in valid_pocs_bear if not p.get('is_boundary'))
                 if poc_count >= 2 and current_tf_bear == "2h":
@@ -218,7 +224,6 @@ if __name__ == "__main__":
                 
                 valid_pocs_bear.append(biggest_bear)
                 current_search_idx_bear = int(biggest_bear['peak_idx'])
-                if len(valid_pocs_bear) >= stop_bear_recursion_at - 1: break
                 
             # Procesar Zonas
             nivel_bajista = 2
@@ -236,9 +241,12 @@ if __name__ == "__main__":
                 
                 if not sub_bear_status["CYCLE_DEAD"]:
                     peso_actual = 100 - nivel_bajista
-                    if sub_bear_status["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": sub_bear['BAJA'], "peso": peso_actual})
-                    if sub_bear_status["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": sub_bear['ALTA'], "peso": peso_actual})
-                    if sub_bear_status["MEDIA"]: sells.append({"name": f"{name} (Media)", "z": sub_bear['MEDIA'], "peso": peso_actual})
+                    if sub_bear_status["ALTA"] or sub_bear_status["MEDIA"] or sub_bear_status["BAJA"]:
+                        if sub_bear_status["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": sub_bear['BAJA'], "peso": peso_actual})
+                        if sub_bear_status["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": sub_bear['ALTA'], "peso": peso_actual})
+                        if sub_bear_status["MEDIA"]: sells.append({"name": f"{name} (Media)", "z": sub_bear['MEDIA'], "peso": peso_actual})
+                    else:
+                        alerts.append({"name": name, "activacion": sub_bear['activacion'], "zona_alerta": sub_bear['MEDIA'], "tipo": "VENTAS"})
                     
                 nivel_bajista += 1
                 
@@ -267,9 +275,12 @@ if __name__ == "__main__":
         print(f"[MACRO ALCISTA POST-FONDO (30M)] Origen: {abs_min_post:.2f} | Fin: {abs_max_post:.2f}")
         
         if not macro_pb_status["CYCLE_DEAD"]:
-            if macro_pb_status["BAJA"]: buys.append({"name": "Macro Alcista Post-F (Baja)", "z": macro_pb['BAJA'], "peso": 96})
-            if macro_pb_status["MEDIA"]: buys.append({"name": "Macro Alcista Post-F (Media)", "z": macro_pb['MEDIA'], "peso": 96})
-            if macro_pb_status["ALTA"]: sells.append({"name": "Macro Alcista Post-F (Alta)", "z": macro_pb['ALTA'], "peso": 96})
+            if macro_pb_status["ALTA"] or macro_pb_status["MEDIA"] or macro_pb_status["BAJA"]:
+                if macro_pb_status["BAJA"]: buys.append({"name": "Macro Alcista Post-F (Baja)", "z": macro_pb['BAJA'], "peso": 96})
+                if macro_pb_status["MEDIA"]: buys.append({"name": "Macro Alcista Post-F (Media)", "z": macro_pb['MEDIA'], "peso": 96})
+                if macro_pb_status["ALTA"]: sells.append({"name": "Macro Alcista Post-F (Alta)", "z": macro_pb['ALTA'], "peso": 96})
+            else:
+                alerts.append({"name": "Macro Alcista Post-F", "activacion": macro_pb['activacion'], "zona_alerta": macro_pb['MEDIA'], "tipo": "COMPRAS"})
             
         valid_pocs_post_bull = []
         current_search_idx_pb = highest_post_bottom_idx
@@ -288,9 +299,11 @@ if __name__ == "__main__":
                 continue
             
             # Use 'drop' instead of 'impulse' for bullish POCs
-            if valid_pocs_post_bull and biggest_bull_pb.get('type') != 'RESET':
-                if biggest_bull_pb['drop'] > valid_pocs_post_bull[-1]['drop']:
-                    while valid_pocs_post_bull and biggest_bull_pb['drop'] > valid_pocs_post_bull[-1]['drop']:
+            # Nota: si la cima del stack es un RESET (boundary), no tiene 'drop': se trata
+            # como límite de fractalidad impenetrable (inf) y no se puede engullir.
+            if valid_pocs_post_bull:
+                if biggest_bull_pb['drop'] > valid_pocs_post_bull[-1].get('drop', float('inf')):
+                    while valid_pocs_post_bull and biggest_bull_pb['drop'] > valid_pocs_post_bull[-1].get('drop', float('inf')):
                         popped = valid_pocs_post_bull.pop()
                         print(f"       -> [X] Nivel en {popped['trough']:.2f} invalidado (engullido por un fractal mayor).")
                     biggest_bull_pb['is_boundary'] = True
@@ -315,9 +328,12 @@ if __name__ == "__main__":
             
             if not pb_bull_status["CYCLE_DEAD"]:
                 peso_actual = 95 - nivel_pb 
-                if pb_bull_status["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": pb_bull['BAJA'], "peso": peso_actual})
-                if pb_bull_status["MEDIA"]: buys.append({"name": f"{name} (Media)", "z": pb_bull['MEDIA'], "peso": peso_actual})
-                if pb_bull_status["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": pb_bull['ALTA'], "peso": peso_actual})
+                if pb_bull_status["ALTA"] or pb_bull_status["MEDIA"] or pb_bull_status["BAJA"]:
+                    if pb_bull_status["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": pb_bull['BAJA'], "peso": peso_actual})
+                    if pb_bull_status["MEDIA"]: buys.append({"name": f"{name} (Media)", "z": pb_bull['MEDIA'], "peso": peso_actual})
+                    if pb_bull_status["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": pb_bull['ALTA'], "peso": peso_actual})
+                else:
+                    alerts.append({"name": name, "activacion": pb_bull['activacion'], "zona_alerta": pb_bull['MEDIA'], "tipo": "COMPRAS"})
                 
             nivel_pb += 1
 
@@ -373,5 +389,10 @@ if __name__ == "__main__":
     for b in final_buys:
         print(f" -> {b['name']}: {format_z(b['z'])}")
         
+    if alerts:
+        print("\n--- 4. ZONAS EN EVOLUCION (ALERTAS NO ACTIVADAS) ---")
+        for a in alerts:
+            print(f" -> {a['name']}: Si el precio toca {a['activacion']:.2f} (38.2%), se activará Zona de {a['tipo']} en {format_z(a['zona_alerta'])}")
+            
     current_price = df_1d.iloc[-1]['close']
     print(f"\nPRECIO ACTUAL: {current_price:.2f}")
