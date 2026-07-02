@@ -236,6 +236,8 @@ Al trabajar con más de un ciclo (ej. un Ciclo Mayor Macro y un Ciclo Menor o Su
 
 > **Precisión algorítmica:** la concurrencia existe únicamente cuando las zonas **se superponen o se tocan**. Dos zonas de la misma dirección completamente separadas (con espacio libre entre ellas) NO concurren: ambas conviven como zonas independientes del mapa (ej. la Zona Baja de un ciclo nunca es "sándwich" de su propia Zona Media, que está más arriba y no la toca).
 
+> **Excepción de la Zona en Trabajo (fractalidad infinita):** la zona mayor que **contiene actualmente al precio** es el campo de trabajo, no una zona competidora: NO elimina por inmersión/sándwich a los sub-ciclos que nacen dentro de ella. La fractalidad es infinita (Sección 3, Caso 2: se baja hasta el "ciclo vigente" que SÍ esté tocando sus propias zonas para poder operar). La zona mayor en trabajo sigue aportando las 4 informaciones: dirección prioritaria, volumen, TP macro y anulación.
+
 ### Caso 1: Inmersión Total (La más simple)
 - **Escenario:** La Zona Menor (del sub-ciclo) está **completamente inmersa** (metida por completo) dentro de la Zona Mayor (del ciclo macro).
 - **Regla:** La Zona Menor desaparece y se elimina automáticamente. NO se buscan patrones basándose en la medida de la Zona Menor. Todo patrón y gestión se trabaja usando exclusivamente los límites de la Zona Mayor.

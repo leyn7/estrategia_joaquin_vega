@@ -117,8 +117,13 @@ def procesar_pocs(pocs, direction, fin_val, df_zoom, extremo_idx, base_nombre, b
         nivel += 1
 
 
-def resolver_concurrencia(zonas, buy_or_sell):
-    """Aplica la concurrencia global (la zona de mayor peso manda) y devuelve las supervivientes."""
+def resolver_concurrencia(zonas, buy_or_sell, current_price=None):
+    """Aplica la concurrencia global (la zona de mayor peso manda) y devuelve las supervivientes.
+
+    Excepción de la Zona en Trabajo (fractalidad infinita, Sección 3 Caso 2): la zona mayor
+    que CONTIENE actualmente al precio es el campo de trabajo — no elimina a los sub-ciclos
+    que nacen dentro de ella; esos sub-ciclos son la vía operativa del trabajo de la mayor.
+    """
     if buy_or_sell == "BUY":
         zonas = sorted(zonas, key=lambda x: max(x['z']), reverse=True)
     else:
@@ -132,6 +137,8 @@ def resolver_concurrencia(zonas, buy_or_sell):
             if i == j: continue
             otro = zonas[j]
             if otro['z'] is None: continue
+            if current_price is not None and min(otro['z']) <= current_price <= max(otro['z']):
+                continue  # la mayor está en trabajo (precio dentro): no tritura sub-ciclos
             if otro['peso'] > current['peso']:
                 new_z, razon = apply_concurrency(otro['z'], current['z'], buy_or_sell)
                 if new_z != current['z']:
@@ -302,12 +309,13 @@ def main():
     # CONCURRENCIA GLOBAL
     # =========================================================================
     print("\n--- 2. CONCURRENCIA GLOBAL DE ZONAS ACTIVAS ---")
+    current_price = df_1d.iloc[-1]['close']
 
     print("\n[ZONAS DE COMPRAS]")
-    final_buys = resolver_concurrencia(buys, "BUY")
+    final_buys = resolver_concurrencia(buys, "BUY", current_price)
 
     print("\n[ZONAS DE VENTAS]")
-    final_sells = resolver_concurrencia(sells, "SELL")
+    final_sells = resolver_concurrencia(sells, "SELL", current_price)
 
     print("\n--- 3. ZONAS OPERATIVAS FINALES ---")
     print("ZONAS DE VENTAS:")
@@ -322,7 +330,6 @@ def main():
         for a in alerts:
             print(f" -> {a['name']}: Si el precio toca {a['activacion']:.2f} (38.2%), se activará Zona de {a['tipo']} en {format_z(a['zona_alerta'])}")
 
-    current_price = df_1d.iloc[-1]['close']
     print(f"\nPRECIO ACTUAL: {current_price:.2f}")
 
 

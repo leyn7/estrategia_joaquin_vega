@@ -1,0 +1,537 @@
+venga vamos a ver otro caso y ahora
+
+vamos a iniciar mapa en un gráfico
+
+intermedio lo primero esto es un gráfico
+
+de cuatro horas lo primero comprobamos
+
+que ese punto que tenemos ahí es
+
+correcto nos subimos uno observamos que
+
+sea un buen origen lo es por tanto
+
+podemos iniciar mapa desde aquí bien
+
+fijaros que en el ejemplo anterior vimos
+
+un ejemplo en donde nada más medir el
+
+impulso teníamos el caso más fácil no un
+
+retroceso muy potente fijaros como aquí
+
+tenemos otro de los casos que se nos
+
+puede dar en donde al medir
+
+voy a trazo
+
+vemos que efectivamente tiene retroceso
+
+ponemos sus marcas
+
+aquí nos dio el ciclo válido a partir de
+
+ahí fijaros como el precio va respetando
+
+esa zona de 38 lo primero que hacemos es
+
+antes de nada marcar si tenemos ciclo
+
+tenemos zonas el precio en adelante
+
+grande
+
+no me hagáis marcas pequeñas por favor
+
+todo visual tenemos una zona de ventas
+
+parte alta y por supuesto parte baja
+
+marcamos todas las direcciones ventas
+
+parte alta ventas parte baja siempre son
+
+compras perfecto
+
+fijaros como aquí nos paramos y decimos
+
+el precio ha trabajado o está trabajando
+
+algunas de mis zonas la respuesta es no
+
+hay ciclo pero el precio no trabaja
+
+ninguno de mis zonas esto implica que mi
+
+ciclo principal no me da información no
+
+tengo nada que me diga hacia dónde hasta
+
+donde no tengo ningún tipo de
+
+información es el momento de buscar un
+
+segundo ciclo a ver si ese segundo ciclo
+
+me empieza a dar las primeras
+
+informaciones
+
+como el precio no ha trabajado el 61 8 a
+
+la búsqueda de un segundo ciclo me
+
+preguntó el precio en este ciclo que
+
+estoy analizando ha tocado en algún
+
+momento el 61 8 la respuesta es no esto
+
+es lo que hacemos siempre la misma
+
+pregunta para buscar un nuevo ciclo el
+
+precio ha trabajado ha tocado el 61 8 la
+
+respuesta es no
+
+acordaros que en el caso anterior la
+
+respuesta era así y directamente nos
+
+íbamos a trabajar el movimiento
+
+contrario al ciclo que estamos midiendo
+
+como aquí en este caso la respuesta es
+
+no tenemos que aplicar el protocolo de
+
+búsqueda de puntos de control al
+
+movimiento que estoy analizando al
+
+impulso que estoy analizando si la
+
+respuesta hubiera sido sí directamente
+
+nos íbamos a trabajar el movimiento
+
+contrario pero como la respuesta es no
+
+tengo que desgranar mediante puntos de
+
+control
+
+la caída el movimiento que estoy
+
+analizando vamos a ello vamos a abarcar
+
+puntos de control a esta caída hasta
+
+aquí perfecto
+
+protocolo vamos a marcar visualmente los
+
+retrocesos más importantes podría ser
+
+ese podría ser este y podría ser éste
+
+vamos a validar los
+
+ese punto se ha validado si el precio ha
+
+caído por aquí debajo al menos un tercio
+
+de esa altura vemos que si cojo ya mi
+
+segundo color
+
+perfecto punto validado
+
+ahí tengo uno bien
+
+voy al siguiente voy a validar este
+
+punto de control
+
+veo que el precio ha caído un tercio más
+
+de un tercio de esa altura por tanto
+
+punto validado hay algún retroceso menor
+
+por detrás de este no el retroceso que
+
+hay detrás es mayor por tanto ambos son
+
+válidos
+
+perfecto me voy al último
+
+ahí estamos está claramente validado el
+
+precio tiene algún retroceso menor por
+
+detrás de este no por tanto son todos
+
+correctos
+
+ya tengo los sitios adecuados para
+
+buscar mi siguiente ciclo mi siguiente
+
+ciclo
+
+cojo el primero que me encuentro desde
+
+el origen del movimiento voy a por el
+
+primer punto y trazo
+
+hasta el final
+
+segundo color
+
+marcamos azul
+
+bien
+
+observamos
+
+el precio cae y efectivamente aquí nos
+
+dio ciclo por tanto tenemos ya
+
+posibilidad de marca
+
+perfecto ahí está vamos a marcar
+
+marcamos yo siempre marco primero la
+
+zona de 61 para llevarlo siempre de
+
+forma mecanizada
+
+a ponerlo aquí
+
+fijaros como ya veo que me va a dar
+
+concurrencias
+
+perfecto marco una parte alta al
+
+principio marcarlo luego al final con la
+
+práctica ya vais a ver directamente
+
+cuáles son las zonas que valen y las que
+
+no pero de momento marcarlo fijaros
+
+tenemos aquí concurrencia en todas las
+
+zonas
+
+vamos con la parte alta zona menor
+
+completamente inmersa en zona mayor
+
+directamente no vale
+
+zona de 60 y 18 la primera que iba a ser
+
+atacada será la menor tiene al menos la
+
+mitad de su tamaño libre antes de entrar
+
+en zona mayor no por tanto no vale
+
+parte baja
+
+zona menor completamente inmersa en zona
+
+mayor directamente no vale
+
+fijaros como el ciclo azul este ciclo
+
+azul no tiene ninguna zona útil esto nos
+
+va a ocurrir siempre que cojamos puntos
+
+de control muy cercanos al origen del
+
+ciclo anterior esto ya nos va a pasar
+
+casi siempre que cojamos un punto de
+
+control muy cercano al origen del ciclo
+
+anterior
+
+por tanto ese punto de control no vale y
+
+ese ciclo no vale
+
+me voy al siguiente punto de control me
+
+voy al siguiente punto de control
+
+con homies vivo hago exactamente mismas
+
+marcas
+
+veo que tengo ciclo por supuesto ahí
+
+tuve ciclo y eso quiere decir
+
+que si tuve ciclo tengo zonas desde el
+
+instante en que validó s 38 marcamos
+
+grande
+
+grande desde dónde está el precio en
+
+adelante grande
+
+perfecto zona de 61
+
+zonas de parte alta
+
+zona de parte baja perfecto
+
+y concurrencias lo primero que hacemos
+
+es liquidar las vemos zona menor
+
+en sandwich con dos zonas que están
+
+mayores del mismo sentido sándwich no
+
+vale
+
+fuera
+
+zona de 60 y 18 totalmente correcta es
+
+una zona no tiene concurrencia con
+
+ningún otro ninguna otra zona del ciclo
+
+superior parte baja zona menor metida en
+
+zona mayor directamente no vale por
+
+tanto veo que este segundo ciclo sí que
+
+me da
+
+una zona correcta y por tanto es válida
+
+bien me paro qué información traía del
+
+ciclo anterior traía la información
+
+ninguna el ciclo rojo no me daba ninguna
+
+información por tanto no tenía
+
+movimientos primarios ni tenía
+
+absolutamente nada pero me encuentro que
+
+ahora el precio está trabajando una zona
+
+de 60 y 18 es decir dentro del mapa que
+
+tengo es la primera zona es la primera
+
+zona en donde el precio ha estado o está
+
+trabajando esta se convierte en zona
+
+primaria mientras no se trabaje ninguna
+
+zona roja esta es la zona que manda está
+
+sin duda es la zona que manda
+
+cuidado que si el precio
+
+decíamos siempre que los ciclos se
+
+rompían si el precio superaba la zona y
+
+llegaba a su siguiente nivel bien a
+
+partir de tener concurrencias diremos
+
+que una zona menor también se rompe si
+
+el precio en algún momento alcanza la
+
+zona mayor dicho de otra manera si el
+
+precio aquí ahora mismo nos da patrón de
+
+ventas venderemos pero si el precio
+
+acaba subiendo y llega a esa zona mayor
+
+esta zona menor se ha roto y por tanto
+
+se rompería todo el ciclo al ser la
+
+única zona válida que tiene el ciclo
+
+azul pero mientras eso no suceda
+
+esta es la zona que manda por tanto
+
+ahora mismo sabemos que el precio está
+
+no decimos el precio ha estado fijaros
+
+como el precio aquí vino una vez
+
+y sale de zona origina movimiento pero
+
+el precio a nulo
+
+al llegar a ese máximo de nuevo a nulo
+
+ese primer trabajo que hizo el precio
+
+cortamos por tanto sabemos que aquí ha
+
+habido una evolución pero el precio está
+
+trabajando en la zona que información
+
+sacamos cuando el precio está bueno lo
+
+primero ahí estoy buscando ya patrón de
+
+ventas ya los veremos ahí estaría
+
+buscando patrón de ventas quiero
+
+el origen de ese movimiento perfecto
+
+pero quiero más hacia donde por supuesto
+
+quiero vender quiero vender
+
+movimiento principal mientras la zona se
+
+mantenga un movimiento principal de mi
+
+mapa ventas 2 hasta donde hasta zona
+
+contraria más alejada es primaria es la
+
+zona que está ahora mismo mandando en el
+
+mapa se convierte en zona primaria no es
+
+secundaria
+
+movimiento potencial zona contra área
+
+más alejada tercero
+
+donde te anulan cuidado cuando el precio
+
+está trabajando la zona que estamos
+
+buscando el movimiento primario no puedo
+
+tener dónde te anulas porque todavía no
+
+has originado movimiento
+
+es momento de buscar patrón
+
+no veo que haya un origen de movimiento
+
+hecho por tanto el que te permito y el
+
+donde te anulan todavía no lo sé
+
+en conclusión cuando el precio trabaja
+
+está perdón trabajando la zona es el
+
+momento de buscar patrón solo me
+
+proporcionan dos informaciones el hacia
+
+dónde y el hasta dónde hasta que no vea
+
+que ha originado movimiento no te puedo
+
+meter el donde te anular y el que te
+
+permite por tanto fijaros estamos
+
+trabajando con dos ciclos tengo la
+
+información conjunta
+
+ahora mismo en este mapa solo podría
+
+estar buscando motivos de venta patrón
+
+de ventas esta sería la opción que
+
+tendría en este mapa si el precio cae
+
+veo que tienes aquí una zona de rebote y
+
+veo que tienes aquí una zona de rebote
+
+antes de poder llegar a objetivos
+
+finales si quisiera tener más
+
+información ya debería ir a buscar un
+
+tercero
+
+pero hasta aquí esta sería la
+
+información de este mapa de acuerdo
+
+yo puedo quedarme aquí tranquilamente si
+
+no quiero buscar un tercer ciclo estar
+
+buscando patrón de ventas y mis
+
+objetivos mis únicas zonas de decisión a
+
+trabajar serían esa azul esta parte baja
+
+o si el precio llegará aquí volverá a
+
+buscar patrón de ventas en zona
+
+principal
+
+de acuerdo
+
+fijaros que yo he decidido cuántos
+
+ciclos trabajar pero tengo que saber muy
+
+bien entender el contexto del mapa
+
+completo ante cualquier tipo de dibujo
+
+siempre es lo mismo
+
+

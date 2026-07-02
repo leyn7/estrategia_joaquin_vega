@@ -1,0 +1,579 @@
+venga muchachos vamos a ver ya el caso
+
+más complicado el dibujo más complicado
+
+que nos podemos encontrar
+
+comprobamos es una atemporalidad
+
+intermedia comprobamos que el punto de
+
+origen es correcto nos vamos a una
+
+superior vemos que ese punto es un
+
+origen correcto perfecto
+
+podemos decir que a partir de ahí
+
+podemos iniciar mapa
+
+cojo todo el movimiento empiezo a trazar
+
+ya sabemos que estos casos son donde no
+
+tenemos ni siquiera ciclo protocolo que
+
+debemos aplicar tres marcas de alerta
+
+nivel 38 2 punto de inicio con alerta
+
+y nos vamos a marcar su zona de 60 y 18
+
+en grande
+
+perfecto
+
+marcamos dirección de trabajo
+
+segundo paso del protocolo en este
+
+dibujo nos vamos a mínimos
+
+anteriores a ver si desde el habría
+
+retroceso y estuviera trabajando una
+
+parte baja vigilamos la extensión de que
+
+el precio no toque en ningún momento la
+
+extensión por debajo nos vamos a este
+
+mínimo anterior vemos que no tiene
+
+retroceso suficiente seguimos buscando
+
+seguimos buscando cuidado extensión
+
+cualquier ciclo que hubiera ya estaría
+
+roto por tanto no he encontrado ningún
+
+ciclo válido
+
+tercer paso del protocolo tengo que
+
+desgranar mediante puntos de control
+
+toda esta caída necesito encontrar mi
+
+primer ciclo marcamos los retrocesos que
+
+visualmente sean más importantes ya
+
+sabéis que podemos hacer el protocolo
+
+completo este es de pequeño truquito
+
+qué podemos hacer para no hacerlo
+
+completo bien me cojo el mayor si éste
+
+está validado el anterior que es menor
+
+estará obsoleto por tanto voy a medir
+
+voy a comprobar que efectivamente
+
+162 pips vamos a ver este
+
+155 si válido este el anterior estará
+
+muerto has tenido que superar por aquí
+
+debajo un tercio de esa altura
+
+claramente la ha superado y por tanto
+
+puedo decir que ese punto está validado
+
+mi primer color
+
+ya tengo el primer sitio desde donde voy
+
+a poder buscar ciclo voy a validar el
+
+segundo está claro que el precio ha
+
+superado no no no no pan cojo el punto
+
+más alto punto validado
+
+perfecto ya tengo sitios desde dónde
+
+buscar
+
+nuevos ciclos perfecto
+
+y quitamos este
+
+cojo mi vivo y atrás
+
+todavía es un punto demasiado lejano no
+
+hay retrocesos suficientes voy a volver
+
+a marcar el protocolo nivel 38 2
+
+punto que no estás todavía trabajando te
+
+pongo en alerta
+
+y te voy a marcar tu zona de 61
+
+comprobamos concurrencias
+
+si lo soy si las hubiera ya sabéis como
+
+las tenemos que hacer
+
+fijaros como la marco grande pero la
+
+marco más pequeñita que la anterior para
+
+saber qué es un ciclo menor que el
+
+primero que marcamos voy a marcar
+
+también los 38
+
+yo sé que esta zona es el nivel 38
+
+pertenece a esa zona y yo sé que ese
+
+nivel 38 pertenece a esa zona
+
+no tengo ciclo segundo paso del
+
+protocolo me voy a buscar mínimos
+
+anteriores
+
+repito la mecánica a ver si estuviera
+
+trabajando una parte baja
+
+fijaros
+
+ahí tenemos un ejemplo
+
+fijaros
+
+en este mínimo fijaros que no toco la
+
+extensión está trabajando una parte baja
+
+eso quiere decir
+
+vamos a marcar
+
+de esa parte baja
+
+eso quiere decir que el precio
+
+efectivamente está trabajando una parte
+
+baja
+
+a marcar
+
+la ponemos en su sitio gracias
+
+esto es lo que está sucediendo el precio
+
+está trabajando ahí dio ciclo nos rompió
+
+el ciclo el precio estuvo trabajando una
+
+parte baja sabemos que cuando el precio
+
+trabaja una parte baja nos sirve ninguna
+
+zona de este ciclo
+
+que está totalmente vigente
+
+no sirve ninguna otra zona más que su
+
+parte baja zona de compras no sirve ni
+
+su 38 ni sirve absolutamente ninguna
+
+otra zona aquí se va a producir
+
+evolución
+
+si el precio toca este primer 38 2 si el
+
+precio se hubiera y hace lo que la zona
+
+pide que es subir y alcanza ese nivel el
+
+ciclo hasta abajo estaría completamente
+
+activado y esa primera zona de 61 junto
+
+con sus otras zonas posibles observando
+
+concurrencias con zonas mayores estaría
+
+totalmente útil por tanto aquí ahora
+
+mismo lo que estoy viendo es que el
+
+precio
+
+tiene un ciclo totalmente validado que
+
+estamos trabajando una parte alta perdón
+
+una parte baja y que nosotros
+
+necesitamos poner
+
+sin duda ya las opciones de trabajo en
+
+compras fijaros que es el caso más
+
+complicado es el caso más difícil si
+
+entendemos estos casos lo demás es pan
+
+comido bien que tendríamos que estar
+
+viendo que el precio
+
+trabajo
+
+la zona luego se salió
+
+no anuló la zona no anuló el ciclo el
+
+precio salió
+
+origina un movimiento y ahora mismo el
+
+precio vuelve a estar en zona por tanto
+
+motivo suficiente para buscar patrón de
+
+compras
+
+quiero comprar
+
+quiero buscar patrón de compras quiero
+
+comprar hasta donde hasta el 61 18 de la
+
+evolución ese será el movimiento máximo
+
+potencial que tiene cuando se está
+
+trabajando una parte baja hasta el 60 y
+
+18 de la evolución que es el movimiento
+
+completo
+
+de acuerdo cuidado que si el precio sube
+
+en el momento que suba ahí activa la
+
+evolución quitaríamos absolutamente todo
+
+lo que marca nuestro ciclo rojo ya no
+
+sirve para nada y ya estaríamos marcando
+
+el ciclo total de la evolución con zona
+
+de 61 marcaríamos también su parte alta
+
+que vemos que no vale estaría en
+
+concordancia con zona mayor inmersa
+
+dentro de zona mayor no valdría y
+
+pondríamos parte baja que sería
+
+totalmente útil mientras eso no suceda
+
+estamos trabajando
+
+esta zona
+
+de acuerdo por tanto fijaros como aquí
+
+la información es un poquito más
+
+delicada es el caso más complicado si yo
+
+quisiera ahora mismo buscar un segundo
+
+ciclo ya tengo clara la información que
+
+me da el ciclo mayor el ciclo que manda
+
+ahora mismo esa zona de parte baja con
+
+posible evolución
+
+si quisiera buscar un nuevo ciclo me voy
+
+al
+
+nuevo punto de control que me deje
+
+cuando estaba desgranando la caída
+
+desde ahí yo puedo buscar
+
+un nuevo ciclo
+
+de trazar
+
+hasta el final pongo segundo color a mí
+
+vivo
+
+tiene retroceso al 38 si si tienes
+
+retroceso
+
+tienes zonas
+
+por tanto
+
+38 totalmente válido
+
+marcó sus zonas cuidado con las
+
+concurrencias
+
+perfecto
+
+parte alta
+
+parte baja
+
+marcó sus direcciones
+
+ahí está
+
+bien que traigo que información traigo
+
+de marcarlo bien
+
+qué información traía traía que estaba
+
+trabajando una parte baja de ciclo
+
+quería buscar patrón de compras perfecto
+
+qué más traigo que el recorrido
+
+potencial de esta zona roja era hasta el
+
+60 y 18 de la evolución perfecto
+
+pero mi segundo ciclo me está dando más
+
+zonas de decisión y me dice ten cuidado
+
+cuando compres que antes de llegar a tu
+
+máximo objetivo se encuentra con dos
+
+zonas intermedias vamos a comprobar las
+
+concurrencias parte alta
+
+zona menor se trabaja primero que la
+
+futura zona mayor tiene la mitad libre
+
+si acotó
+
+zona de 61 tienes al menos alguna
+
+concurrencia que no sea inválida no hay
+
+ni una concurrencia inválida con otra
+
+zona parte baja exactamente igual por
+
+tanto de momento son
+
+útiles
+
+vamos a ver qué pasa entonces
+
+con la información total
+
+si compro cuidado con esta zona que
+
+tiene zona de ventas y además una
+
+concurrencia que llamaremos
+
+concurrencias buenas con un 38 de la
+
+evolución que se va a producir si el
+
+precio sube estás concurrencias son
+
+buenísimas
+
+una zona de trabajo que tiene en su
+
+interior
+
+una zona de rebote es una zona buenísima
+
+mucho cuidado con esta zona porque si el
+
+precio sube es muy posible que aquí te
+
+haga el primer retroceso en tu contra
+
+no sólo eso que si supera esa zona antes
+
+de llegar a tus objetivos finales
+
+cuidado que se encuentra con otra zona
+
+intermedia
+
+zona donde también el precio te podría
+
+rebotar por tanto si compras cuidado con
+
+tus objetivos cumple los sí pero ten en
+
+cuenta estas zonas
+
+ten en cuenta estas zonas tenemos
+
+muchísima información si el precio sube
+
+cuidado con esta zona con la
+
+concurrencia buena y antes de llegar
+
+objetivos cuidado con esta otra zona que
+
+el preciso te puede dar la vuelta
+
+es el caso más complicado porque tenemos
+
+que estar pensando en el ciclo rojo
+
+cuidado que como solo se trabaja una
+
+parte baja
+
+hay que tener en cuenta además las
+
+evoluciones y al meter un segundo ciclo
+
+estamos trabajando con mucha más
+
+información sería momento de buscar
+
+compras en definitiva cuidado con zonas
+
+secundarias sé cuál es el recorrido
+
+máximo potencial pero cuidado con zonas
+
+secundarias cuidado sería buen momento
+
+en estas zonas para sacar parciales y
+
+dos si trabajo cualquier zona de estas
+
+en movimiento secundario cuidado que su
+
+objetivo sólo es el 60 y 18 del
+
+movimiento que se origina aquí
+
+cuidado con las zonas secundarias que
+
+sólo tienen como recorrido potencial el
+
+60 y 18 del civo de seguimiento del
+
+movimiento que se me origina aquí
+
+cuidado por tanto tenemos un mapa
+
+que va a evolucionar si haces lo que la
+
+zona roja pide va a evolucionar
+
+tendremos que en las prácticas este caso
+
+es el que más deberíamos de estar
+
+practicando
+
+cuando hagamos las prácticas cuando
+
+entréis en la etapa de prácticas en la
+
+sala será el caso que más tengamos que
+
+estar trabajando veréis que es mecánico
+
+veréis que puede parecer complicado pero
+
+siempre va a ser la misma historia pero
+
+sé que al principio como es una
+
+información más en el aire digamos así
+
+es el caso que más veces os va a
+
+complicar la vida pero por eso en las
+
+sesiones de práctica lo vamos a machacar
+
+muy mucho y sería uno de los casos que
+
+más tendríais que practicar cuando
+
+estuviéramos metidos en la sala para que
+
+las dudas se solucionarán de una forma
+
+mucho más clara vale pero el proceso que
+
+hemos hecho es el mismo es el mismo
+
+seguiremos machacando en este
+
+en este dibujo y en el próximo vídeo lo
+
+que vamos a hacer es meter ya un tercer
+
+ciclo en cualquiera de los casos que
+
+hemos visto de acuerdo
+
+nos vemos en el próximo muchachos
+
+

@@ -1,0 +1,263 @@
+aquí están las tres tipos de
+
+concurrencia de zonas que se nos pueden
+
+dar vamos a quedarnos con los ejemplos
+
+de
+
+zonas que son en sentido bajista daros
+
+cuenta de que las concurrencias siempre
+
+son con zonas de
+
+sentidos iguales en este caso vamos a
+
+trabajar con zonas que tienen el mismo
+
+sentido bajista
+
+creo que es this cuenta también de que
+
+cuando tenemos concurrencia de zonas
+
+siempre hay una zona mayor y siempre hay
+
+una zona menor siempre hay una zona que
+
+es más potente que la que acabamos de
+
+trazar
+
+fijaros y vamos a ver el ejemplo aquí
+
+imaginaros que el precio está subiendo
+
+y quiero que hoy 50 de este primer tipo
+
+de concurrencia sin duda es el más fácil
+
+vemos que hay dos zonas una mayor y una
+
+menor que tienen el mismo sentido y que
+
+la pequeña está completamente inmersa
+
+completamente inmersa en la zona mayor
+
+zona mayor siempre manda siempre zona
+
+mayor manda por tanto cuando tengamos
+
+este tipo de concurrencia zona menor
+
+completamente inmersa en zona mayor
+
+directamente la zona menor la
+
+quitaríamos es decir estaríamos buscando
+
+en el caso de que el precio llegase a
+
+esta concurrencia siempre buscaríamos
+
+patrón en el tamaño de la zona mayor
+
+nunca estaríamos trabajando patrones en
+
+el tamaño de la zona menor en este caso
+
+la zona menor desaparece por completo la
+
+quitamos automáticamente esa zona no
+
+sirve y por tanto
+
+la quitamos
+
+es el caso más sencillo de detectar nos
+
+vamos a la siguiente concurrencia el
+
+precio sube va a llegar a estas
+
+concurrencias de dos zonas y observar
+
+el segundo ciclo nos da una zona en
+
+donde primero se trabaja la zona menor
+
+por supuesto tiene la misma dirección
+
+pero primero se trabajaría en la zona
+
+menor en este caso la zona menor solo es
+
+útil y podríamos dejarla en el gráfico
+
+en el caso de que tuviera claramente
+
+la mitad de su tamaño libre fijaros en
+
+el punto medio de esa zona tiene que
+
+tener claramente y cuando digo
+
+claramente es claramente es decir eso es
+
+claramente esto no es claramente digo
+
+claramente cuando está claramente la
+
+mitad de su tamaño libre si esto es así
+
+y tiene al menos la mitad de su tamaño
+
+claramente libre antes de entrar en la
+
+zona mayor sería una zona correcta pero
+
+acotamos el tamaño hasta el límite en el
+
+que entraría en la zona más potente
+
+valdría la zona tiene espacio suficiente
+
+como para que el precio en ella pudiera
+
+hacer un patrón
+
+por tanto la acotamos hasta el límite en
+
+donde entraría en la zona mayor es una
+
+zona totalmente válida en el caso de que
+
+el precio no tuviera al menos la mitad
+
+de su tamaño libre en la zona menor que
+
+es la primero que trabajaría el precio
+
+directamente esa zona tan poco valdría
+
+automáticamente la quitaríamos quedaría
+
+solo la zona mayor
+
+y vamos a ver
+
+el tercer caso el tercer caso
+
+implica que cuando el precio llega a esa
+
+concurrencia de zonas
+
+fijaros la primera que se trabaja la
+
+primera que se trabaja es la zona mayor
+
+si esto sucede la zona menor nunca sirve
+
+nunca sirve jamás sirve cuando el precio
+
+supera
+
+el límite de la zona mayor con
+
+concurrencia en este caso la zona menor
+
+nunca sirve es lo que llamamos que
+
+estaríamos entre un sandwich de esta
+
+zona roja tendría su zona roja de parte
+
+alta por encima estaría en un sandwich
+
+esta forma menor estaría metida entre
+
+dos zonas mayores por tanto en esta
+
+concurrencia la zona menor nunca sirve
+
+lo veremos después en el gráfico es la
+
+concurrencia que más os suele dar la
+
+lata de acuerdo vamos a hacerlo en la
+
+parte en donde las concurrencias vienen
+
+en zona de compras el precio caería
+
+fijaros zona menor metida por completo
+
+en zona mayor en este caso no hay
+
+ninguna duda es la concurrencia más
+
+simple zona menor desaparece no quiero
+
+trabajar esa zona estaríamos trabajando
+
+sólo posibilidades en zona grande
+
+en este caso el precio cae fijaros que
+
+tenemos una concurrencia en donde
+
+primero el precio trabaja la zona menor
+
+ambas son del mismo sentido volvemos a
+
+aplicar lo mismo si tienes claramente la
+
+mitad de tu tamaño libre
+
+te dejo como válida pero te acotó
+
+ay si tú no tuvieras la mitad de tu
+
+tamaño libre aquí por ejemplo
+
+directamente no te quiero fuera la
+
+quitamos
+
+y pasamos a la concurrencia que más
+
+problemitas os va a dar
+
+hay una zona menor
+
+que el precio
+
+ataca primero la zona mayor aquí no
+
+estamos mirando el límite si tiene
+
+claramente la mitad libre es primero la
+
+zona mayor la que se trabaja solo
+
+estamos observando la mitad libre cuando
+
+es atacada en primera instancia la zona
+
+menor por tanto aquí cuando yo veo esto
+
+esta concurrencia nunca es buena
+
+directamente cuando ocurre esto la
+
+quitamos
+
+de acuerdo tenemos que ver muy bien los
+
+tres tipos de concurrencia que se nos
+
+pueden dar
+
+

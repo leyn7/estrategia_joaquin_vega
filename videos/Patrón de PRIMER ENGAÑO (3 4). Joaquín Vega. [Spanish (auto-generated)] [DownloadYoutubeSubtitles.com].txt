@@ -1,0 +1,447 @@
+qué es lo que estaría haciendo
+
+voy a volver otra vez donde estábamos
+
+que es lo que estaría haciendo en este
+
+instante lo que llamamos el operador
+
+calmado o el operador que hace una
+
+entrada calmada
+
+cuando un agresivo ya está el mercado y
+
+que ya está con su fijo de seguimiento y
+
+con su zona y marcada
+
+ya sabe que tiene que gestionar en base
+
+a su tipo de seguimiento el calmado aquí
+
+todavía no ha entrado
+
+sabe que el agresivo y hasta dentro un
+
+calmado tiene que saber cómo opera un
+
+agresivo y un agresivo tiene que saber
+
+cómo opera un calmado
+
+el agresivo está dentro ya está en
+
+mercado
+
+ojo daros cuenta de que yo no os voy a
+
+hablar nunca de objetivos a buscar con
+
+ninguno de los patrones porque los
+
+objetivos son vuestros vosotros decidís
+
+el tipo de objetivos de parciales y de
+
+finales que vais a buscar siempre por
+
+defecto
+
+el patrón no es el que te dice el
+
+objetivo es el mapa tendréis que saber
+
+en vuestro mapa esta zona qué objetivos
+
+potenciales tiene por un lado y dos
+
+tendréis que tener ya más que definido
+
+qué tipo de objetivos de parciales y de
+
+finales vais a buscar con cada entrada y
+
+con cualquier patrón el patrón nunca os
+
+da los objetivos a buscar es el mapa y
+
+vuestra decisión personal de objetivos
+
+cuidado con esto el patrón lo que te
+
+dice es formas de entrada y stops y cómo
+
+seguir vuestra entrada ok
+
+el calmado aquí no está dentro está
+
+observando
+
+está observando y sabe que la agresivo
+
+ya está dentro
+
+el calmado lo que va a hacer es lo
+
+siguiente va a hacer exactamente lo
+
+mismo que hizo el agresivo nada más que
+
+entró va a su vivo y va a seguir
+
+ese movimiento
+
+va a hacer lo mismo
+
+qué hacía el agresivo va a seguir ese
+
+movimiento
+
+el agresivo sabe que esa zona para él es
+
+una zona importante
+
+si se pasa el precio de ahí tendrá que
+
+gestionar pero el calmado está deseando
+
+que el precio haga ese retroceso porque
+
+el calmado va a entrar al mercado una
+
+vez que el agresivo está dentro pero
+
+siempre esperando el retroceso al fib de
+
+seguimiento es decir el calmado está
+
+esperando que el precio en algún momento
+
+le haga un retroceso a la zona de
+
+seguimiento va a esperar que el precio
+
+le haga un retroceso a la zona de
+
+seguimiento
+
+el agresivo no quiere esto el agresivo
+
+lo que quiere es que el precio tire pero
+
+el calmado lo está deseando quieren lo
+
+contrario
+
+en el momento que el precio viene a
+
+trabajar la zona de seguimiento el
+
+calmado ahora entra a mercado y pone un
+
+stop en el mismo sitio que lo puso el
+
+agresivo es decir un calmado siempre
+
+entra con menos stop
+
+espera que el precio siempre le dé
+
+retroceso al fibo de seguimiento
+
+quiere lo contrario de lo que quiere el
+
+agresivo que ya está en el mercado el
+
+calmado está entrando en el retroceso y
+
+pone el stop en el mismo sitio pero ojo
+
+ese calmado que está entrando ahí va a
+
+hacer una gestión de protección igual
+
+que el agresivo si el precio se escapa
+
+un milímetro de esa zona el calmado
+
+también sacará la mitad de su posición
+
+la gestión en protección es idéntica
+
+forma de entrada distinta pero gestión
+
+en protección idéntica puntos de stop en
+
+el mismo sitio y gestión de protección
+
+idéntica simplemente que el calmado
+
+entra con menos esto
+
+cuál es la ventaja que tiene ser calmado
+
+y cuál es el inconveniente la ventaja la
+
+acabamos de ver
+
+espera que entre el agresivo y al
+
+retroceso activo de seguimiento él se
+
+incorpora para trabajar con menores
+
+stocks
+
+bien
+
+cuál es la problemática que tiene ser o
+
+hacer una entrada calmada el problema es
+
+que como en esa entrada agresiva
+
+el precio efectivamente
+
+estén manipulando la zona en ventas
+
+manipulando la zona en compras si esto
+
+se dispara y si esto se dispara el
+
+calmado se la va a perder
+
+porque ir a consultivo de seguimiento
+
+con su vivo de seguimiento y nunca le va
+
+a dar el retroceso a 60 y 18 un calmado
+
+siempre opera menos que un operador
+
+agresivo pero opera con menores stops
+
+siempre es decir un operador calmado
+
+trabaja con menos stops y sus entradas
+
+siempre son un poco más fiables no se
+
+trata de que decidáis
+
+o uno u otro podemos trabajar los dos de
+
+forma perfecta no hay ningún problema
+
+imaginaros que llegáis aquí y estáis
+
+viendo que el precio está así estáis
+
+haciendo este este mapa y os dais cuenta
+
+de que ya os generó una entrada agresiva
+
+y no estuvisteis el mercado
+
+no la visteis se os escapó
+
+habéis llegado tarde y os dais cuenta
+
+que ahí ya podríais haber entrado es tan
+
+sencillo como que bueno no entré en la
+
+agresiva siempre mi plan b es una
+
+entrada calmada no he cogido la agresiva
+
+me esperaré a que el precio me haga mi
+
+calmada para incorporarme por tanto no
+
+es cuestión de que siempre seamos
+
+agresivos o que siempre seamos calmados
+
+no
+
+tenemos que saber trabajar con las dos y
+
+valorar que cada uno valore qué tipo de
+
+entrada le viene mejor si agresiva
+
+o esperar siempre retrocesos activo de
+
+seguimiento para entrar calmados
+
+tenemos que valorarlo y decidirlo
+
+nosotros
+
+hemos hablado
+
+de que el patrón perfecto
+
+es
+
+el que cumple todos los requisitos
+
+nuestra zona de engaño una vez que el
+
+precio me confirma ahí
+
+y una vez que el precio me confirma ahí
+
+que tenemos el inicio de la pauta 3 y
+
+que nosotros ya estamos viendo y
+
+valorando
+
+que el precio me da una zona de engaño
+
+correcta proporcional no se escapa de
+
+zona vemos que todo es correcto
+
+podemos decir que hay engaño en el
+
+momento que el precio llegue al 138 2
+
+hemos dicho que es mejor que se coma el
+
+161 8 que se coma toda la zona de engaño
+
+siempre es mucho mejor pero ahí el
+
+precio
+
+ya podemos decir que efectivamente ha
+
+llegado a la zona de engaños es muy
+
+importante que tengáis en cuenta algo
+
+si el precio llega a ese 138 2
+
+no se ha comido el 161 8 y el precio
+
+vuelve a meterse por debajo ahí el
+
+precio nos está dando una entrada sí
+
+pero esto es lo que llamamos entradas
+
+con carencia es decir tú no vienes de
+
+comerte toda la zona
+
+aquí pueden pasar dos cosas pueden pasar
+
+dos cosas la más probable que en algún
+
+momento acabes volviendo a la zona de
+
+161 8 es decir que me estás haciendo un
+
+engaño fraccionado primero te comes el
+
+138 y es muy muy muy probable que acabes
+
+viniendo a re testear el 161 8 muy
+
+probable es decir cuando el precio nos
+
+dé una entrada sin haberse comido todo
+
+el 161 8 incluso un poquito más abajo no
+
+has comido el 161 8 esas entradas no las
+
+deberíamos de hacer nunca
+
+porque es muy probable que falle es
+
+cierto que habrá veces las menos veces
+
+que el precio ahí
+
+pide sin haberse comido el 161 8
+
+pero no deberíamos hacer esas entradas
+
+porque vamos a fallar muchísimas vamos a
+
+fallar muchísimas en qué momento cuando
+
+veo esta situación cuando veo que el
+
+precio me estás dando entrada sin
+
+haberte comido todo el 161 8
+
+en qué momento puedo decir yo si era un
+
+engaño correcto si superara al máximo si
+
+superará el máximo de la pauta número
+
+dos o si superará el mínimo
+
+de la pauta número 2 si el precio viene
+
+de no comerse el 161 hicieras esto
+
+rompes con claridad ese mínimo de la
+
+pauta 2 o rompes con claridad ese máximo
+
+de la pauta 2 ahí podría decir que
+
+efectivamente fue un engaño correcto y a
+
+partir de ahí podría ir ya con mi vivo
+
+de seguimiento esperando retrocesos a 61
+
+8 podría ir con mi tivo de seguimiento
+
+esperando retrocesos a 60 y 18 sólo
+
+podríamos dar por bueno viniendo el
+
+precio de un 138 2 si rompiera mínimos
+
+de pauta 2 o máximos de pauta 2 mientras
+
+eso no sucediera
+
+y tú me estás dando entrada sin haberte
+
+comido todo el 161 8
+
+yo sigo pensando que lo más probable es
+
+que acabes viniendo a re testear el 161
+
+8 me lo puedes hacer y me lo harás
+
+muchas veces fraccionado en dos veces
+
+nunca me hagáis entradas en este patrón
+
+que no vengan de haber restado el 161 8
+
+de acuerdo nos vamos a evitar entradas
+
+muchas entradas que son falsas
+
+vamos a esperar entonces que el precio
+
+se acabe por comer siempre la zona
+
+completa ok
+
+

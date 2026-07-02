@@ -1,0 +1,295 @@
+el primer ciclo es sin duda el que manda
+
+acordaros
+
+vamos a poder trabajar con incluso hasta
+
+5 ciclos cada uno de vosotros decidirá
+
+la cantidad de ciclos con las que va a
+
+trabajar con los que va a trabajar pero
+
+tenemos que tener clara una cosa a mayor
+
+información a mayor cantidad de ciclos
+
+mayor información más cantidad de
+
+información vamos a tener que manejar
+
+por tanto se requiere más habilidad yo
+
+no tengo que deciros con cuántos ciclos
+
+tenéis que trabajar yo os digo de 1 a 5
+
+y que cada uno de vosotros se encuentre
+
+la medida correcta para que tenga un
+
+buen manejo de la información no manejes
+
+más información de la que podéis
+
+empezamos a trabajar 12 vamos añadiendo
+
+a medida que vamos cogiendo habilidad
+
+pero nunca pretendáis llegar más de
+
+donde vuestra habilidad en ese momento
+
+os permite todo se entrena no tengáis
+
+prisa en trabajar demasiados ciclos sin
+
+obtener incidir mejor dicho incidir
+
+muchísimo en que la información que
+
+tenéis la sepáis manejar vamos entonces
+
+a buscar el primer ciclo el segundo
+
+ciclo no olvidéis de que tendrá digamos
+
+menos potencia que el primer ciclo el
+
+tercer ciclo tendrá menos potencia que
+
+el segundo y el primero y así
+
+sucesivamente por tanto el primer ciclo
+
+es el que manda
+
+mientras ese ciclo no se rompa es el
+
+ciclo que manda y cualquier información
+
+que nos den ciclos
+
+que vamos a ir buscando dentro del ciclo
+
+mayor son simplemente añadido a la
+
+información del ciclo principal vamos
+
+entonces a saber cómo localizamos este
+
+primer ciclo que es sin duda el más
+
+importante antes de nada quiero que
+
+entendáis una cosa
+
+sea el sitio que sea donde vais a
+
+iniciar el mapa ya hemos visto cómo
+
+buscar un punto de origen correcto sea
+
+donde sea
+
+imaginaros que primero hemos encontrado
+
+un punto de inicio aquí correcto
+
+localizando como siempre lo primero que
+
+hacemos es el impulso mayor desde ese
+
+punto de origen podemos encontrarnos con
+
+tres tipos de dibujos distintos que
+
+dependen del tipo de retroceso que tenga
+
+ese impulso mayor que estamos iniciando
+
+el mapa con el que estamos iniciando el
+
+mapa el primer caso que se nos puede dar
+
+es que cuando encontramos ese primer
+
+movimiento mayor ese punto de origen que
+
+proporciona un movimiento de impulso del
+
+fractal mayor que vamos a trabajar
+
+podemos encontrarnos que
+
+sea un retroceso muy importante nosotros
+
+lo que vamos a hacer siempre es desde
+
+ese punto de origen que hemos trazado
+
+que hemos localizado vamos a
+
+nuestro fibo y vamos a empezar a trazar
+
+le a todo ese movimiento un fibonacci
+
+ya sabéis que nosotros necesitamos que
+
+el precio
+
+haya dado ciclo en este primer caso no
+
+sólo el precio nos da ciclo sino que
+
+además vemos
+
+que el precio ya está trabajando nuestro
+
+nivel 60 y 18 es decir
+
+el movimiento de impulso que nosotros
+
+hemos decidido empezar a trabajar tiene
+
+no solo la activación del ciclo sino que
+
+además el precio está en una de nuestras
+
+zonas en la zona de 61 h
+
+podremos encontrarnos también de que
+
+cuando hemos localizado ese punto de
+
+origen aquí
+
+observamos que al trazar nuestro cebo
+
+vemos que ese retroceso que le sigue
+
+no es tan profundo pero nos da ciclo
+
+pero no se está trabajando ninguna de
+
+nuestras zonas
+
+y también podemos tener un tercer caso
+
+solo pueden ser tres casos en donde
+
+podamos tener ese impulso desde el punto
+
+de origen donde nosotros hemos querido
+
+iniciar y tenemos un retroceso que en
+
+ningún caso al trazar nuestro vivo
+
+vemos que cumple el requisito para que
+
+podamos decir que tenemos un ciclo
+
+correcto me da igual que sea y que sea
+
+aquí que sea aquí que sea aquí que sea
+
+aquí o que sea aquí el caso es que no
+
+tenemos ningún tipo de retroceso
+
+suficiente para decir que en ese primer
+
+impulso mayor que nosotros hemos
+
+decidido empezar a trabajar
+
+no podemos tener ciclos
+
+en el caso bajista sería exactamente
+
+igual lo hacemos
+
+podemos en ese momento encontrar un
+
+movimiento de origen que nos da un
+
+movimiento bajista localizamos ese punto
+
+de origen buscamos ese impulso mayor que
+
+es el impulso del fractal inicial que
+
+vamos a querer trabajar
+
+siempre vamos a trazar nuestro fibonacci
+
+y podemos encontrarnos que el precio no
+
+solo nos ha dado ciclo
+
+sino que además el precio nos está
+
+trabajando la zona del 61 8
+
+podemos encontrarnos que el precio una
+
+vez que hemos localizado ese punto de
+
+origen al trazar nuestro pib o al
+
+impulso que es el que marca
+
+nuestro figo mayor vemos que
+
+efectivamente cumple el requisito
+
+de darnos ciclo pero todavía no ha
+
+trabajado ninguna de nuestras zonas en
+
+la parte alta y una zona de 61 ni una
+
+parte baja y podemos encontrarnos el
+
+tercer caso
+
+en donde el precio ni siquiera al trazar
+
+nuestro fijo
+
+en ningún momento el precio nos ha dado
+
+un ciclo correcto podemos encontrarnos
+
+uno de estos tres casos
+
+insisto que este retroceso donde no nos
+
+tenemos ciclo me da igual que esté ahí
+
+que esté aquí que aquí que aquí y aquí
+
+el caso es que no tenemos ciclos
+
+vamos a empezar con el primero que es el
+
+más sencillo el siguiente el del medio
+
+donde tenemos ciclo pero no se está
+
+trabajando ninguna zona veremos que
+
+tienen sus pautas y sus protocolos y por
+
+último veremos el que es un poquito más
+
+complicado que es
+
+el caso en el que no tenemos ningún tipo
+
+de ciclo con nuestro vivo inicial vamos
+
+a verlo en gráfico
+
+

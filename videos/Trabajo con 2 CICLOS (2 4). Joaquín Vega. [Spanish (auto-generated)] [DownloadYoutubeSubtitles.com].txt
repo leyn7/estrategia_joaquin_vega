@@ -1,0 +1,435 @@
+mirad acabo de trazar un segundo ciclo y
+
+fijaros como tengo aquí diferentes
+
+concurrencias esta parte alta del
+
+círculo azul fijaros primero el precio
+
+atacaría la zona menor tenemos un
+
+sándwich el precio tiene una zona menor
+
+metida entre dos zonas mayores acordaros
+
+del sándwich siempre lo vais a
+
+identificar mejor en este caso cuando
+
+hay sándwich entre dos zonas mayores que
+
+tienen el mismo sentido esta zona nunca
+
+será útil por tanto eliminamos
+
+nos vamos a la zona de 60 y 18 lo
+
+primero que hacemos cuando estamos
+
+trabajando con un nuevo ciclo comprobar
+
+las concurrencias
+
+zona de 60 y 18 no tiene concurrencia
+
+con ninguna otra zona del ciclo superior
+
+por tanto es una zona totalmente válida
+
+perfectamente es útil y vamos a la parte
+
+baja fijaros si el precio cae zona menor
+
+completamente inmersa en zona mayor zona
+
+menor directamente de esa pared por
+
+tanto de este segundo ciclo la única
+
+zona útil que tiene para ser operada es
+
+la zona de 60 y 18 un ciclo será útil y
+
+deberíamos dejarlo marcado en el gráfico
+
+si al menos tiene una zona útil si no
+
+tuviera ninguna zona útil directamente
+
+quitaríamos cualquier zibo ya que no
+
+tendría nada que trabajar
+
+pero si tiene una única zona útil o dos
+
+o las tres es totalmente correcto
+
+fijaros el proceso hemos comprobado
+
+que el precio había trabajado el 60 y 18
+
+del ciclo rojo por eso hemos dicho que
+
+íbamos a buscar el segundo ciclo al
+
+retroceso del fractal que estábamos
+
+trabajando el paso siguiente es
+
+comprobamos que el ciclo marcamos zonas
+
+y comprobamos concurrencias siempre es
+
+el mismo proceso todo es mecánico
+
+siempre es igual una vez que ya nos
+
+hemos quedado con la información de
+
+marcaje útil que nos proporciona este
+
+ciclo ahora nos paramos
+
+antes de sacar la información decimos
+
+que traíamos qué información traíamos
+
+del ciclo rojo del ciclo rojo traíamos
+
+nuestro movimiento principal son ventas
+
+todo lo que haga en compras es
+
+movimiento secundario segundo que esas
+
+ventas tienen un recorrido potencial
+
+hasta su zona contraria más alejada
+
+tercero que el precio anularía estas
+
+ideas si volvía a entrar en zona roja
+
+acabaríamos con el movimiento que
+
+traemos y volveríamos a empezar
+
+con un nuevo una nueva búsqueda de
+
+patrón en zona roja y por último
+
+teníamos un que te permite que teníamos
+
+aquí la zona de 61 del movimiento de
+
+seguimiento que teníamos claramente ya
+
+marca bien con todo fresco de la
+
+información que traíamos vamos a
+
+intentar incorporar la información que
+
+el ciclo azul nos proporciona en base a
+
+lo que acabo de decir lo primero que
+
+estoy viendo es pues mira si el precio
+
+debe de caer debería de poder tener el
+
+potencial de caer hasta aquí abajo lo
+
+que me estoy dando cuenta es de que se
+
+va a encontrar con una posibilidad de
+
+freno en un 38 nuevo ya no sólo tenemos
+
+el rojo sino que ya tenemos también el
+
+azul cuidado que si el precio cae
+
+ya se encuentra un nuevo sitio de rebote
+
+y 2 si el precio cae qué es lo que pide
+
+mi mapa principal cuidado que antes de
+
+llegar a objetivos el precio se
+
+encuentra con una zona contraria es una
+
+zona secundaria habíamos dicho que todo
+
+lo que hagamos en ventas movimiento
+
+primario todo lo que hagamos en compras
+
+movimiento secundario pues bien el ciclo
+
+azul me muestra ya una posible zona
+
+donde yo podría 1 si vengo vendido
+
+cuidado con esta zona que es una zona
+
+donde el precio me puede hacer un rebote
+
+importante contrario a mi movimiento
+
+principal y 2 si no vengo vendido es una
+
+zona en donde yo podría buscar
+
+movimiento secundario
+
+cuidado con lo que os voy a decir en
+
+cuanto a los movimientos secundarios
+
+fijaros que cuando trabajamos un
+
+movimiento principal siempre es hasta la
+
+zona contraria más alejada que tenga el
+
+mapa movimientos primarios siempre
+
+tienen potencial para ir a la zona
+
+contraria más alejada que tiene mi mapa
+
+pero los movimientos secundarios tienen
+
+un recorrido muy concreto no os olvidéis
+
+de este dato que os voy a dar ahora
+
+mismo si yo viera que el precio que hay
+
+aquí
+
+y veo que tengo opción de compra porque
+
+es una zona que se puede operar
+
+el movimiento potencial de cualquier
+
+zona secundaria y ojo con este dato
+
+siempre será hasta el 60 y 18 de
+
+seguimiento del movimiento principal
+
+aquí no diríamos
+
+compramos y el recorrido potencial es
+
+hasta la zona más alejada contraria que
+
+tiene mi mapa no es movimiento
+
+secundario y si yo al primario que es la
+
+venta solo le permito que hagas vivos de
+
+seguimiento a zona de 60 y 18
+
+mis movimientos primarios solo le
+
+permito retrocesos a zona de 61 de mi
+
+vivo de seguimiento yo iría con mi vivo
+
+de seguimiento por tanto a mi compra
+
+sólo le permitiré siempre como
+
+movimiento secundario que viniera a mi
+
+61 8 de seguimiento
+
+cada vez que operó en zonas secundarias
+
+el movimiento máximo potencial es hasta
+
+la zona de 60 y 18 del seguimiento del
+
+movimiento primario es fácil de entender
+
+si estoy hablando de que puedo operar en
+
+zonas secundarias significa que hay una
+
+zona primaria que ha generado un
+
+movimiento por tanto manda la
+
+información del primario una zona
+
+secundaria siempre absolutamente siempre
+
+tendrá como recorrido máximo potencial
+
+el 61 8 del fibo de seguimiento del
+
+movimiento que manda que es en este caso
+
+las ventas
+
+dicho de otra manera como veis cada vez
+
+que a un movimiento secundario el
+
+recorrido potencial siempre es mucho más
+
+corto esto quiere decir que yo cada vez
+
+que operó en zonas secundarias debería
+
+de tener un ratio de objetivos
+
+predefinido menor a que si trabajo una
+
+zona primaria
+
+esto tenéis que entenderlos saberlo y
+
+planificarlo si yo en mis operaciones en
+
+zona primaria estoy trabajando con unos
+
+ratios por ejemplo por decir algo de un
+
+1 a 3 de parcial y un 1 a 6 de final
+
+cada vez que yo trabaje una zona
+
+secundaria que sé que tiene recorridos
+
+mucho menores debería de hacer otro tipo
+
+de planificación en ratios
+
+si tengo 13 16 en movimientos
+
+principales pues voy a poner por ejemplo
+
+un 12 14 en movimientos secundarios o un
+
+directamente un 13 y me quito el
+
+problema de los movimientos secundarios
+
+es de vital importancia
+
+repito movimientos potenciales de zonas
+
+primarias siempre es hasta la zona
+
+contraria más alejada del mapa
+
+recorridos potenciales de zonas
+
+secundarias siempre es hasta el 61 8 del
+
+movimiento que manda en ese gráfico vivo
+
+de seguimiento debemos de tener dos
+
+tipos de ratios uno para trabajar formas
+
+primarias y otro para trabajar zonas
+
+secundarias por tanto fijaros como hasta
+
+este momento acabo de meter una nueva
+
+información en el gráfico voy a poner
+
+todo como lo tenía
+
+acabo de meter una nueva información
+
+a mi mapa
+
+antes sólo tenía una primera opción de
+
+trabajo que era ventas en mi zona de
+
+seguimiento
+
+ahora no sólo sé que el precio si cae
+
+aquí se puede parar sino que además
+
+tengo una nueva zona de trabajo yo ahora
+
+mismo si el precio sube aquí podría
+
+estar buscando ventas si el precio cae
+
+aquí podría estar buscando compras en
+
+ambos casos en los recorridos
+
+potenciales que tienen
+
+qué es lo que hacemos nosotros cuando
+
+trabajamos ya con más de un ciclo
+
+entonces es ir localizando más zonas de
+
+decisión y por tanto tener siempre
+
+opciones de trabajo tanto si el precio
+
+sube como si el precio cae entendiendo
+
+que son zonas primarias y cuáles son
+
+zonas secundarias
+
+yo trabajando con simplemente dos ciclos
+
+aquí acabaría mi mapa y simplemente
+
+esperaría que el precio o me trabaje la
+
+zona de ventas de nuevo para
+
+incorporarme a favor de movimiento o que
+
+el precio caiga hasta aquí incorporarme
+
+en movimiento secundario voy haciendo
+
+voy encerrando digamos el precio a
+
+medida que voy sacando nuevos ciclos
+
+encierro el precio con zonas de decisión
+
+mucho más cercanas tanto por encima como
+
+por debajo si siguiéramos trabajando un
+
+tercer ciclo nos va a dar nueva
+
+información lo veremos en el próximo
+
+vídeo pero ahora mismo si quisiera
+
+simplemente trabajar dos aquí me
+
+quedaría con esta información y me
+
+esperaría a que el precio viniera a esta
+
+zona para ventas o viniera a esta zona
+
+para compras
+
+

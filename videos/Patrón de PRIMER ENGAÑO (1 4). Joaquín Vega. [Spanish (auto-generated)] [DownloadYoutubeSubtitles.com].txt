@@ -1,0 +1,536 @@
+mirar aquí os pongo dos ciclos uno
+
+alcista uno bajista quiero que entendáis
+
+que los patrones son los mismos tienen
+
+la misma estructura bien se den en zona
+
+bajista o bien se den en zona alcista
+
+dentro de nuestros ciclos que tenemos
+
+zonas alcistas y zonas bajistas en
+
+cualquier zona que se nos produzca
+
+tenemos la opción de trabajar dentro de
+
+alguna zona
+
+da igual la dirección que habéis visto
+
+que simplemente las estructuras son de
+
+una forma u otra pero la esencia es la
+
+misma es decir voy a hacerlo es un
+
+ejemplo en un ciclo alcista en una zona
+
+de 60 y 18 que voy a hacer es un ejemplo
+
+en un ciclo bajista por ejemplo en una
+
+parte alta voy a hacer un ejemplo en
+
+zona de ventas y un ejemplo en zona de
+
+compras daría igual en la zona que se
+
+produzca simplemente el patrón es el
+
+mismo pero al revés
+
+el precio lo primero que tiene que hacer
+
+es darnos ciclo para que podamos tener
+
+zonas si no tenemos ciclo no tenemos
+
+zonas bien
+
+en este caso el precio lo primero que
+
+tiene que hacer vamos a hacerlo en la
+
+zona de 61 es llegar a activar la zona
+
+la zona ya está siendo trabajada voy a
+
+haceros en este ejemplo la parte alta
+
+que en este caso una vez que el precio
+
+dio ciclo habrá tenido que superar el
+
+límite de la zona de 61 y llegar a su
+
+siguiente nivel
+
+en ese caso esta zona ya estaría rota
+
+por tanto pauta número uno el precio
+
+tiene que entrar en una de nuestras
+
+zonas
+
+una vez que el precio entra en una de
+
+nuestras zonas vamos a tener en cuenta
+
+siempre dos conceptos el primero
+
+el límite de la zona que estamos
+
+trabajando
+
+nuestras zonas tienen un tamaño
+
+marcamos el límite vamos a ponerlo con
+
+otro color el límite de la zona que
+
+estamos trabajando y marcamos el límite
+
+de la zona que estamos trabajando y
+
+vamos a marcar lo que llamamos
+
+proporcionalidad de la zona que
+
+significa proporcionalidad de la zona
+
+normalmente un patrón cualquiera de los
+
+que se nos vaya a producir debería de
+
+llegar al menos a la mitad de la zona
+
+llamamos proporcionalidad
+
+a la mitad
+
+de la zona
+
+ahora lo explicaremos mejor el tema de
+
+la proporcionalidad
+
+pero marcaremos fijaros que no es un
+
+punto exacto es una zonita la zona media
+
+del ciclo que estamos trabajando
+
+vamos a tener en cuenta siempre ya estos
+
+dos conceptos el límite del tamaño de la
+
+zona y esa proporcionalidad que es la
+
+zona media del ciclo que estamos
+
+trabajando perfecto
+
+hemos dicho que
+
+una estructura de vuelta al menos las
+
+que vamos a trabajar nosotros tiene tres
+
+pautas
+
+en el momento que el precio ha llegado y
+
+se ha metido en una de nuestras zonas ya
+
+decimos que esto es la pauta número uno
+
+sabemos que tiene que seguir una pauta
+
+número 2 una pauta número 2 siempre es
+
+un rechazo
+
+del precio a la zona que acaba de llegar
+
+es un rechazo del precio a la zona que
+
+acaba de llegar pauta número 2
+
+en qué momento puedo decir que yo ya
+
+tengo
+
+la formación se está formando la pauta
+
+número 2
+
+para ello el precio aquí ha tenido que
+
+dejarme un mínimo y para aquí el precio
+
+ha tenido que dejarme un máximo es decir
+
+dos velas a izquierda y dos velas a
+
+derecha dos velas a izquierda cerradas
+
+dos velas a derechas cerradas pero algo
+
+muy importante que tenéis que saber
+
+cuando el precio esté trabajando y
+
+alguna de nuestras zonas con una pauta
+
+número 1 siempre vamos a bajarnos una
+
+temporalidad
+
+a ver las tripas del patrón que se está
+
+formando es decir si yo estoy viendo
+
+estos ciclos en un gráfico de h1
+
+por ejemplo el momento que yo he visto
+
+que el precio ha llegado a la zona
+
+para llover el patrón que esté formando
+
+esa pauta número 1 esa pauta número 2 y
+
+se pauta número 3 me bajaría una
+
+temporalidad siempre vamos a ver los
+
+patrones una temporalidad por debajo del
+
+tamaño del ciclo que estuviéramos
+
+trabajando de acuerdo una temporalidad
+
+abajo
+
+si esto fuera un h1 y ya me estaría
+
+bajando a un m 30 a ver el proceso de
+
+esas tres pautas que nosotros
+
+quisiéramos ver
+
+necesito que el precio aquí me haga un
+
+mínimo necesito que aquí el precio me
+
+haga un máximo una temporalidad inferior
+
+en el momento que me lo hace
+
+ya puedo decir ya puedo decir que
+
+estamos en pauta número dos tiene que
+
+tener un máximo tiene que tener un
+
+mínimo en una temporalidad inferior
+
+a partir de ahí nosotros vamos a hacer
+
+lo siguiente y vamos a meter un concepto
+
+nuevo que es lo que llamamos vivos de
+
+entrada hasta ahora hemos hablado de
+
+vivos de ciclo
+
+hemos hablado también que cuando el
+
+precio original o movimiento hablábamos
+
+de vivos de seguimiento íbamos a meter
+
+la última acepción a nuestros vivos que
+
+es lo que llamamos vivos de entrada
+
+a partir de este instante y para siempre
+
+hablábamos siempre de que nuestros vivos
+
+trabajábamos con seis niveles nivel 0 38
+
+260 y 18 y 100 hablábamos también de la
+
+extensión 38 2 por encima y por debajo a
+
+partir de este instante ya dejaremos
+
+para siempre metido en nuestros niveles
+
+de fiv o la extensión 161 8 pero ojo
+
+esta extensión 160 y 18 sólo única y
+
+exclusivamente sirve para trabajar
+
+patrones para nada más sólo para
+
+trabajar patrones por tanto ya tendremos
+
+para siempre en nuestros vivos siete
+
+niveles
+
+qué es lo que vamos a hacer con nuestro
+
+vivo de entrada
+
+una vez que el precio me ha generado ese
+
+máximo o este mínimo y que ya puedo
+
+decir que estoy en el proceso de pauta
+
+número 2 lo que voy a hacer es mi
+
+chivo de entrada y voy a seguir
+
+esa pauta número 2
+
+y voy a seguir esa pauta número
+
+
+si el precio sigue cayendo
+
+yo te sigo
+
+pauta número 2 si el precio sigue
+
+subiendo
+
+yo voy con mi vivo de entrada siguiendo
+
+t
+
+qué es lo que está sucediendo aquí
+
+si estamos trabajando el patrón de
+
+primer engaño que es el que más veces se
+
+va a repetir lo que están haciendo es
+
+que la zona de decisión en ese máximo y
+
+en ese mínimo ya han generado un punto
+
+de engaño ya han generado un nivel de
+
+engaño ya lo han generado
+
+si el precio cae por debajo de ese nivel
+
+aquí todo el mundo va a vender
+
+si el precio sube por encima de ese
+
+nivel aquí todo el mundo va a comprar se
+
+están superando niveles de resistencia
+
+se están perdiendo zonas de mínimo aquí
+
+se ha perdido el 61 8 aquí todo el mundo
+
+va a vender y ahí todo el mundo va a
+
+comprar
+
+perfecto
+
+aquí entra en juego ahora
+
+entonces cuando tenemos que estar muy
+
+vigilantes de lo que llamaremos zona de
+
+engaños ese nivel de extensión 138 2 y
+
+ese nivel 161 8
+
+esto es lo que llamamos zona
+
+es decir
+
+el precio debería de llegar para
+
+realizar el engaño por encima o por
+
+debajo de ese punto que están formando
+
+para engañar al público esa es la medida
+
+en donde el precio en la pauta en número
+
+3 debería de llegar el precio pauta
+
+número 1 pauta número 2 faltaría que el
+
+precio llegará a alcanzar esos niveles
+
+para que tuviéramos la pauta número 3
+
+en qué momento podemos decir que la
+
+pauta número 2 ya está acabada y ya
+
+estamos en pauta número 3 esto es muy
+
+importante mirar
+
+si el precio aquí me hace un retroceso
+
+yo sigo en pauta número 2
+
+si el precio vuelve a hacer un nuevo
+
+impulso yo sigo en pauta número 2 y
+
+tengo que seguir con mi vivo de
+
+seguimiento fijaros como la zona de
+
+engaños va cambiando a medida que
+
+aumenta la pauta número 2 en este caso
+
+sube la pauta número 2 la zona de
+
+engaños cae si aquí el precio me hiciera
+
+algún tipo de retroceso y sigue cayendo
+
+fijaros cómo tengo que seguir
+
+con mi vivo de entrada y las zonas de
+
+engaño van cambiando
+
+yo no le pongo que el precio de esto me
+
+lo haga rápido o me lo haga despacio yo
+
+no le pongo tiempo al precio para que me
+
+desarrolle las tres pautas es más unas
+
+veces me lo hará de una forma muy rápida
+
+y otras veces me lo hará de una forma
+
+muy lenta pero quiero que entendáis algo
+
+una vez que el precio aquí me empezó a
+
+formar el origen de la pauta número 2 en
+
+ese punto de engaño que han formado o
+
+aquí en ese punto de engaño que han
+
+formado decimos que estamos en pauta
+
+número 2 mientras el precio no vuelva a
+
+restar el nivel de engaño que originó en
+
+su inicio mientras el precio no vuelva a
+
+caer aquí seguimos en pauta número 2 si
+
+el precio ahora mismo me hace este
+
+retroceso sigo en pauta número 2
+
+y haces este retroceso sigo en pauta
+
+número 2 si tú vuelves a seguir para
+
+arriba yo te tengo que seguir sigo en
+
+pauta número 2 los engaños van cambiando
+
+si tú vuelves a hacerme en este caso un
+
+nuevo mínimo sigo en pauta número 2 los
+
+engaños van cambiando hasta que no
+
+vuelvas a este nivel
+
+seguimos en pauta número 2 me da igual
+
+el tiempo que tardes me da igual la
+
+forma que tenga esa pauta número 2
+
+unas veces podrá estar muy fragmentada y
+
+otras veces podrá hacerme lo muy directo
+
+yo sigo en pauta número 2
+
+si tú sigues cayendo sigo en pauta
+
+número dos si tú sigues aquí subiendo
+
+sigo en pauta número dos hasta que el
+
+precio en algún momento me da igual que
+
+me lo hagas despacio me da igual que lo
+
+hagas deprisa haces pam
+
+y haces
+
+pam
+
+acabas de alcanzar el punto de engaño
+
+original del patrón la pauta número 2 se
+
+acabó
+
+la pauta número 2 se acabó a partir de
+
+ese instante puedo decir que ya estoy en
+
+pauta número 3 y que mi zona de engaños
+
+ya es buena
+
+mientras el precio no llegó
+
+a empezar a formar la pauta número 3
+
+como veis la zona de engaño podía ir
+
+cambiando a partir del instante en que
+
+el precio ya me dijo la 2 se acabó
+
+estamos en pauta 3 ya puedo confirmar
+
+que mi zona de engaños es la correcta y
+
+el precio debería de llegar a esa zona
+
+
