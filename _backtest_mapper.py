@@ -1,4 +1,5 @@
-"""Corre mdt_macro_mapper.py como si fuera el 30 jun 2026 23:21 COT (time-travel).
+"""Corre mdt_macro_mapper.py con time-travel (default: 30 jun 2026 23:21 COT).
+Uso: python _backtest_mapper.py [cutoff_utc_iso]
 Trunca toda descarga al cutoff y reconstruye la vela parcial en curso desde 1m."""
 import sys
 sys.path.insert(0, r"C:\Users\leyner\Documents\proyectos\trading\estrategia_joaquin_vega")
@@ -10,7 +11,8 @@ from datetime import datetime, timezone
 
 import mdt_data
 
-CUTOFF = datetime(2026, 7, 1, 4, 21, tzinfo=timezone.utc)  # 30 jun 23:21 COT
+CUTOFF_STR = sys.argv[1] if len(sys.argv) > 1 else "2026-07-01T04:21"
+CUTOFF = datetime.fromisoformat(CUTOFF_STR).replace(tzinfo=timezone.utc)
 CUTOFF_MS = int(CUTOFF.timestamp() * 1000)
 
 _orig = mdt_data.get_binance_klines
