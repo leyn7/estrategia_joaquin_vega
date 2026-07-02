@@ -18,6 +18,74 @@ def find_micro_fractals(df):
         if is_trough: troughs.append(i)
     return peaks, troughs
 
+def _entrada_profunda(df, p1_idx, p1_val, zona_max, zona_min, direction, detalles):
+    """Patrón de Entrada Profunda (Sección 16). Contexto ya validado: llegada profunda
+    (P1 cruzó la mitad de la zona) + proyección de engaños escapada (cambio irreversible).
+
+    Pauta 3 Corta: entrada a mercado al toque del 61.8 del fibo dinámico de la Pauta 2
+    (la zona va del 61.8 al 80.9, medida desde el extremo). SL en el extremo de la llegada.
+    No existe entrada agresiva. Replay cronológico: el toque solo cuenta desde el instante
+    en que el escape se activó.
+    """
+    detalles["calidad"] = "ENTRADA PROFUNDA (Pauta 3 Corta)"
+    if direction == "SELL":
+        p2_run = df.loc[p1_idx, 'low']
+        escape_activo = False
+        for i in range(p1_idx + 1, len(df)):
+            h = df.loc[i, 'high']
+            l = df.loc[i, 'low']
+            if l < p2_run: p2_run = l
+            imp = p1_val - p2_run
+            if not escape_activo and p2_run + (imp * 1.618) >= zona_max:
+                escape_activo = True
+            if escape_activo:
+                n618 = p2_run + (imp * 0.618)
+                if h >= n618:
+                    n809 = p2_run + (imp * 0.809)
+                    detalles.update({"pauta2_price": p2_run, "impulso": imp,
+                                     "entrada_p3_corta": n618, "limite_gestion_809": n809,
+                                     "stop_loss": p1_val, "hora_gatillo": df.loc[i, 'open_time']})
+                    return {"estado": "P3_CORTA_GATILLO",
+                            "mensaje": f"Entrada Profunda: toque del 61.8 en {n618:.2f}. VENTA a mercado. SL {p1_val:.2f}",
+                            "detalles": detalles}
+        imp = p1_val - p2_run
+        n618 = p2_run + (imp * 0.618)
+        n809 = p2_run + (imp * 0.809)
+        detalles.update({"pauta2_price": p2_run, "impulso": imp,
+                         "entrada_p3_corta": n618, "limite_gestion_809": n809, "stop_loss": p1_val})
+        return {"estado": "ENTRADA_PROFUNDA_ESPERANDO",
+                "mensaje": f"Entrada Profunda activa. Esperando retroceso al 61.8 ({n618:.2f}, zona hasta {n809:.2f}). SL {p1_val:.2f}",
+                "detalles": detalles}
+    else:  # BUY
+        p2_run = df.loc[p1_idx, 'high']
+        escape_activo = False
+        for i in range(p1_idx + 1, len(df)):
+            h = df.loc[i, 'high']
+            l = df.loc[i, 'low']
+            if h > p2_run: p2_run = h
+            imp = p2_run - p1_val
+            if not escape_activo and p2_run - (imp * 1.618) <= zona_min:
+                escape_activo = True
+            if escape_activo:
+                n618 = p2_run - (imp * 0.618)
+                if l <= n618:
+                    n809 = p2_run - (imp * 0.809)
+                    detalles.update({"pauta2_price": p2_run, "impulso": imp,
+                                     "entrada_p3_corta": n618, "limite_gestion_809": n809,
+                                     "stop_loss": p1_val, "hora_gatillo": df.loc[i, 'open_time']})
+                    return {"estado": "P3_CORTA_GATILLO",
+                            "mensaje": f"Entrada Profunda: toque del 61.8 en {n618:.2f}. COMPRA a mercado. SL {p1_val:.2f}",
+                            "detalles": detalles}
+        imp = p2_run - p1_val
+        n618 = p2_run - (imp * 0.618)
+        n809 = p2_run - (imp * 0.809)
+        detalles.update({"pauta2_price": p2_run, "impulso": imp,
+                         "entrada_p3_corta": n618, "limite_gestion_809": n809, "stop_loss": p1_val})
+        return {"estado": "ENTRADA_PROFUNDA_ESPERANDO",
+                "mensaje": f"Entrada Profunda activa. Esperando retroceso al 61.8 ({n618:.2f}, zona hasta {n809:.2f}). SL {p1_val:.2f}",
+                "detalles": detalles}
+
+
 def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
     p1_val = df.loc[p1_idx, 'high'] if direction == "SELL" else df.loc[p1_idx, 'low']
     p2_val = df.loc[p1_idx, 'low'] if direction == "SELL" else df.loc[p1_idx, 'high']
@@ -74,17 +142,31 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
         "proporcional": proporcional
     }
 
+    # Escape de proyección (Sección 16): basta el 161.8 fuera O al ras del límite. Irreversible.
+    escapado = (fibo_1618 >= zona_max) if direction == "SELL" else (fibo_1618 <= zona_min)
+    # Llegada profunda: la Pauta 1 debe haber cruzado la mitad de la zona
+    llegada_profunda = (p1_val >= mitad_zona) if direction == "SELL" else (p1_val <= mitad_zona)
+
+    if escapado:
+        if llegada_profunda:
+            # Llegada profunda + escape -> Patrón de Entrada Profunda (Pauta 3 Corta)
+            return _entrada_profunda(df, p1_idx, p1_val, zona_max, zona_min, direction, detalles)
+        # Sin llegada profunda NO hay Entrada Profunda: no existe patrón (no consume contador).
+        detalles["calidad"] = "DESCARTADA (escape de niveles sin llegada profunda)"
+        if p2_locked:
+            return {"estado": "ANULADO_POR_ESCAPE",
+                    "mensaje": "Niveles de engaño fuera de zona sin llegada profunda (patrón incompleto).",
+                    "detalles": detalles, "idx_muerte": start_p3}
+        return {"estado": "ESTRUCTURA_DESCARTADA",
+                "mensaje": f"Proyección fuera de zona ({fibo_1618:.2f}) con llegada tímida (P1 {p1_val:.2f} no cruza la mitad {mitad_zona:.2f}). Sin patrón: esperar nueva Pauta 1.",
+                "detalles": detalles}
+
     if not p2_locked:
         # Fibo dinámico: la Pauta 2 sigue viva y la Zona de Engaños se mueve con cada nuevo extremo.
         detalles["calidad"] = "PROYECCION PROPORCIONAL" if proporcional else "PROYECCION NO PROPORCIONAL (por ahora)"
         return {"estado": "EN_FORMACION_PAUTA_2",
                 "mensaje": f"Formando Pauta 2 (actualmente {p2_val:.2f}). Zona de Engaños proyectada: {fibo_1382:.2f} a {fibo_1618:.2f}",
                 "detalles": detalles}
-
-    if direction == "SELL" and fibo_1618 > zona_max:
-        return {"estado": "ANULADO_POR_ESCAPE", "mensaje": "El 161.8% se proyecta fuera de la zona (sale por arriba)", "detalles": detalles, "idx_muerte": start_p3}
-    if direction == "BUY" and fibo_1618 < zona_min:
-        return {"estado": "ANULADO_POR_ESCAPE", "mensaje": "El 161.8% se proyecta fuera de la zona (sale por abajo)", "detalles": detalles, "idx_muerte": start_p3}
 
     if not proporcional:
         # Patrón NO proporcional: no se opera jamás. Se rastrea su Pauta 3 hasta que el precio
@@ -277,9 +359,9 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
         
         ultimo_resultado = res
         
-        # Si el patrón fracasó por completo (SL, Doble Toque, Escape o No Proporcional roto),
+        # Si el patrón EXISTIÓ y fracasó (SL, Doble Toque o No Proporcional roto),
         # el institucional hará uno nuevo: evolucionamos al siguiente engaño.
-        if res["estado"] in ["ROTO_POR_STOP_LOSS", "ROTO_POR_DOBLE_TOQUE", "ANULADO_POR_ESCAPE", "ANULADO_POR_PROPORCIONALIDAD"]:
+        if res["estado"] in ["ROTO_POR_STOP_LOSS", "ROTO_POR_DOBLE_TOQUE", "ANULADO_POR_PROPORCIONALIDAD"]:
             idx_muerte = res.get("idx_muerte", p1_idx + 1)
             # Buscamos el siguiente fractal DESDE la muerte del patrón (>=): el extremo que
             # dejó el patrón roto es justamente el candidato a P1 del siguiente engaño.
@@ -290,8 +372,20 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
                 continue
             else:
                 break # No hay más picos después de la rotura
-                
-        # Si el patrón está ACTIVO, FORMÁNDOSE, o es una CARENCIA VIVA, nos quedamos aquí
+
+        # Patrón INCOMPLETO (escape de niveles): nunca existió -> NO consume el contador
+        # de engaños (video: "es la primera vez que estoy buscando ahora").
+        if res["estado"] == "ANULADO_POR_ESCAPE":
+            idx_muerte = res.get("idx_muerte", p1_idx + 1)
+            siguientes_fractales = [f for f in fractals_en_zona if f >= idx_muerte and f > p1_idx]
+            if siguientes_fractales:
+                idx_inicio_busqueda = siguientes_fractales[0]
+                continue
+            else:
+                break # No hay más picos: queda registrado el último estado
+
+        # Si el patrón está ACTIVO, FORMÁNDOSE, es CARENCIA VIVA, ENTRADA PROFUNDA o
+        # una estructura descartada esperando nueva Pauta 1, nos quedamos aquí
         return res
         
     if numero_engano > 3:
@@ -335,11 +429,12 @@ if __name__ == "__main__":
         print(f" Calidad: {d.get('calidad', 'N/A')}")
         print(f" Volumen Recomendado: {d.get('sugerencia_volumen', 'N/A')}")
         
-    if "GATILLO" in resultado['estado']:
+    if "GATILLO" in resultado['estado'] or "ENTRADA_PROFUNDA" in resultado['estado']:
         d = resultado['detalles']
         print("\n--- ZONAS DE OPERACIÓN ---")
-        print(f" 🔥 GATILLO AGRESIVO (Market): {d['gatillo_agresivo']:.2f}")
+        if 'gatillo_agresivo' in d: print(f" 🔥 GATILLO AGRESIVO (Market): {d['gatillo_agresivo']:.2f}")
+        if 'entrada_p3_corta' in d: print(f" 🎯 ENTRADA P3 CORTA (toque 61.8): {d['entrada_p3_corta']:.2f} (zona hasta {d['limite_gestion_809']:.2f})")
         if 'hora_gatillo' in d: print(f" ⏱️ HORA DEL GATILLO: {d['hora_gatillo']}")
         print(f" 🛑 STOP LOSS ESTRUCTURAL: {d['stop_loss']:.2f}")
-        print(f" 🧘 ENTRADA CALMADA (Límite): {d['espera_calmada']:.2f}")
-        print(f" 🛡️ NIVEL DE PROTECCIÓN (50% OUT): {d['fibo_seguimiento_618']:.2f}")
+        if 'espera_calmada' in d: print(f" 🧘 ENTRADA CALMADA (Límite): {d['espera_calmada']:.2f}")
+        if 'fibo_seguimiento_618' in d: print(f" 🛡️ NIVEL DE PROTECCIÓN (50% OUT): {d['fibo_seguimiento_618']:.2f}")

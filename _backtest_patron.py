@@ -7,7 +7,7 @@ import requests
 import pandas as pd
 from datetime import datetime, timezone
 
-from mdt_patrones import detect_patron_institucional, find_micro_fractals
+from mdt_patrones import detect_patron_institucional
 
 INTERVAL = sys.argv[1] if len(sys.argv) > 1 else "1m"
 CUTOFF_STR = sys.argv[2] if len(sys.argv) > 2 else "2026-07-01T04:21"
@@ -46,5 +46,7 @@ if "detalles" in res:
     if "stop_loss" in d:
         if "gatillo_agresivo" in d:
             print(f" GATILLO AGRESIVO: {d['gatillo_agresivo']:.2f} | SL: {d['stop_loss']:.2f} | CALMADA: {d['espera_calmada']:.2f}")
+        elif "entrada_p3_corta" in d:
+            print(f" ENTRADA P3 CORTA (61.8): {d['entrada_p3_corta']:.2f} (zona hasta {d['limite_gestion_809']:.2f}) | SL: {d['stop_loss']:.2f} | Gatillo: {d.get('hora_gatillo', 'esperando')}")
         else:
-            print(f" SL: {d['stop_loss']:.2f} | ENTRADA CALMADA: {d['espera_calmada']:.2f} | Extremo impulso: {d.get('extremo_impulso', 0):.2f} | Validado: {d.get('hora_validacion', '')}")
+            print(f" SL: {d['stop_loss']:.2f} | ENTRADA CALMADA: {d.get('espera_calmada', 0):.2f} | Extremo impulso: {d.get('extremo_impulso', 0):.2f} | Validado: {d.get('hora_validacion', '')}")
