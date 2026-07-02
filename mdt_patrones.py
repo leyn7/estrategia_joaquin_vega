@@ -123,29 +123,52 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
     detalles["calidad"] = calidad
     
     toco_1618 = False
-    pico_engano = p1_val 
+    pico_engano = p1_val
     gatillo = False
     idx_gatillo = None
     cayo_bajo_1382 = False
-    
+    carencia_idx = None  # Gatillo prematuro (con carencia): NO es entrada, es patrón vivo no operable
+
     for j in range(start_p3, len(df)):
         h = df.loc[j, 'high']
         l = df.loc[j, 'low']
         c = df.loc[j, 'close']
-        
+
         if direction == "SELL":
             if not toco_1618:
                 if h >= fibo_1618:
                     toco_1618 = True; pico_engano = h
+                    if carencia_idx is not None:
+                        # Era un engaño fraccionado: regresó y consumió el 161.8%. Se completa.
+                        carencia_idx = None
+                        calidad = "BUENA (Engaño fraccionado completado)"
+                        detalles["calidad"] = calidad
                     if l <= p1_val and c <= p1_val: gatillo = True; idx_gatillo = j; break
                 else:
                     if h > pico_engano:
                         pico_engano = h
-                    if l <= p1_val and c <= p1_val and pico_engano >= fibo_1382:
-                        # Carencia (cruzó 138.2 pero no tocó 161.8)
+                    if carencia_idx is None and l <= p1_val and c <= p1_val and pico_engano >= fibo_1382:
+                        # Carencia (cruzó 138.2 pero no tocó 161.8): gatillo prematuro, NO se opera.
+                        # Queda vivo esperando: consumo del 161.8 (fraccionado) o Validación Posterior.
                         calidad = "DEBIL (Carencia)"
                         detalles["calidad"] = calidad
-                        gatillo = True; idx_gatillo = j; break
+                        carencia_idx = j
+                    if carencia_idx is not None and l < p2_val:
+                        # VALIDACIÓN POSTERIOR (Sección 12): tras el gatillo con carencia, el precio
+                        # rompió con fuerza el origen de la Pauta 3 (extremo de la Pauta 2).
+                        # El engaño se valida retroactivamente: SOLO entrada calmada.
+                        min_post = df.loc[j:, 'low'].min()  # extremo del impulso confirmado hasta ahora
+                        impulso_conf = pico_engano - min_post
+                        fibo_618_seg = pico_engano - (impulso_conf * 0.618)
+                        detalles["stop_loss"] = pico_engano
+                        detalles["extremo_impulso"] = min_post
+                        detalles["espera_calmada"] = fibo_618_seg
+                        detalles["fibo_seguimiento_618"] = fibo_618_seg
+                        detalles["hora_validacion"] = df.loc[j, 'open_time']
+                        detalles["calidad"] = "VALIDADO POSTERIOR (solo entrada calmada)"
+                        return {"estado": "VALIDADO_POSTERIOR",
+                                "mensaje": f"Carencia validada retroactivamente (rompió {p2_val:.2f}). Esperar retroceso calmado a {fibo_618_seg:.2f}",
+                                "detalles": detalles}
             else:
                 if h > pico_engano:
                     pico_engano = h
@@ -159,14 +182,31 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
             if not toco_1618:
                 if l <= fibo_1618:
                     toco_1618 = True; pico_engano = l
+                    if carencia_idx is not None:
+                        carencia_idx = None
+                        calidad = "BUENA (Engaño fraccionado completado)"
+                        detalles["calidad"] = calidad
                     if h >= p1_val and c >= p1_val: gatillo = True; idx_gatillo = j; break
                 else:
                     if l < pico_engano:
                         pico_engano = l
-                    if h >= p1_val and c >= p1_val and pico_engano <= fibo_1382:
+                    if carencia_idx is None and h >= p1_val and c >= p1_val and pico_engano <= fibo_1382:
                         calidad = "DEBIL (Carencia)"
                         detalles["calidad"] = calidad
-                        gatillo = True; idx_gatillo = j; break
+                        carencia_idx = j
+                    if carencia_idx is not None and h > p2_val:
+                        max_post = df.loc[j:, 'high'].max()
+                        impulso_conf = max_post - pico_engano
+                        fibo_618_seg = pico_engano + (impulso_conf * 0.618)
+                        detalles["stop_loss"] = pico_engano
+                        detalles["extremo_impulso"] = max_post
+                        detalles["espera_calmada"] = fibo_618_seg
+                        detalles["fibo_seguimiento_618"] = fibo_618_seg
+                        detalles["hora_validacion"] = df.loc[j, 'open_time']
+                        detalles["calidad"] = "VALIDADO POSTERIOR (solo entrada calmada)"
+                        return {"estado": "VALIDADO_POSTERIOR",
+                                "mensaje": f"Carencia validada retroactivamente (rompió {p2_val:.2f}). Esperar retroceso calmado a {fibo_618_seg:.2f}",
+                                "detalles": detalles}
             else:
                 if l < pico_engano:
                     pico_engano = l
@@ -178,15 +218,12 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
                     gatillo = True; idx_gatillo = j; break
 
     if gatillo:
-        # Tras dar gatillo, verificamos si el precio se da la vuelta y rompe el Stop Loss (Pico del engaño)
+        # Gatillo REAL (consumió el 161.8): verificamos si el precio rompe el Stop Loss (Pico del engaño)
         for k in range(idx_gatillo + 1, len(df)):
             if direction == "SELL" and df.loc[k, 'high'] > pico_engano:
                 return {"estado": "ROTO_POR_STOP_LOSS", "mensaje": "El precio saltó el Stop Loss.", "detalles": detalles, "idx_muerte": k}
             if direction == "BUY" and df.loc[k, 'low'] < pico_engano:
                 return {"estado": "ROTO_POR_STOP_LOSS", "mensaje": "El precio saltó el Stop Loss.", "detalles": detalles, "idx_muerte": k}
-
-        if "Carencia" in calidad:
-            return {"estado": "ANULADO_POR_CARENCIA", "mensaje": "Entrada con Carencia (viva pero no operable).", "detalles": detalles}
 
         impulso_seg = abs(pico_engano - p2_val)
         fibo_618_seg = pico_engano - (impulso_seg * 0.618) if direction == "SELL" else pico_engano + (impulso_seg * 0.618)
@@ -196,7 +233,12 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
         detalles["fibo_seguimiento_618"] = fibo_618_seg
         detalles["hora_gatillo"] = df.loc[idx_gatillo, 'open_time']
         return {"estado": "GATILLO_ACTIVADO", "mensaje": "¡Engaño Completado! Entrada lista.", "detalles": detalles}
-        
+
+    if carencia_idx is not None:
+        return {"estado": "ANULADO_POR_CARENCIA",
+                "mensaje": "Entrada con Carencia (viva pero no operable). Esperando 161.8% o Validación Posterior.",
+                "detalles": detalles}
+
     if not toco_1618:
         return {"estado": "ESPERANDO_1618", "mensaje": f"Buscando 161.8% en {fibo_1618:.2f}", "detalles": detalles}
     return {"estado": "ENGAÑO_EN_CURSO", "mensaje": "Esperando Gatillo.", "detalles": detalles}
