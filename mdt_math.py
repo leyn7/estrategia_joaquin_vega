@@ -21,10 +21,15 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
         instante (origen_v -/+ 0.382*impulso). La muerte es DEFINITIVA aunque después
         haya nuevos extremos (caso 561.93: murió el 2 jul con extremo 567.77; el nuevo
         máximo 568.33 del 3 jul no lo revive).
-      - Excursión más allá del origen sin tocar la muerte: el ciclo sigue vivo; cuando
-        el precio regresa por completo dentro del impulso, el origen se DILATA al
-        extremo de la excursión y las zonas se RE-MIDEN. La activación se re-arma:
-        exige tocar nuevamente el 38.2 del fibo re-medido (desde abajo).
+      - Excursión más allá del origen sin tocar la muerte: el ciclo sigue vivo. El
+        primer 19.1% del impulso más allá del origen ES la zona del origen (Parte
+        Alta en bajista / Parte Baja en alcista, Sección 4): zona OPERATIVA en
+        trabajo, que además borra las zonas internas (Sección 8). Entre el 19.1% y
+        el 38.2% está la Zona de Indecisión (inoperable, Sección 17). Al tocar el
+        38.2 más allá del origen, el ciclo muere. Cuando el precio regresa por
+        completo dentro del impulso, el origen se DILATA al extremo de la excursión
+        y las zonas se RE-MIDEN. La activación se re-arma: exige tocar nuevamente
+        el 38.2 del fibo re-medido (desde abajo).
       - Activación: tocar el 38.2 del fibo vigente. Un nuevo extremo re-dibuja el fibo
         y exige tocar el nuevo 38.2 (el ciclo vuelve a alerta).
       - Zona media: muere si el precio toca el 100% (origen vigente); una re-medición
@@ -101,11 +106,23 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
                 'origen_vigente': m * origen_v, 'fin_vigente': None}
 
     zonas = calc_zones(m * origen_v, m * fin_v, direction)
-    return {'estado': 'VIVO', 'activado': activado, 'hora_activacion': hora_act,
-            'dilatado': dilatado, 'en_excursion': exc_min is not None,
-            'media_muerta': media_muerta, 'origen_vigente': m * origen_v,
-            'fin_vigente': m * fin_v, 'zonas': zonas,
-            'nivel_activacion': zonas['activacion']}
+    res = {'estado': 'VIVO', 'activado': activado, 'hora_activacion': hora_act,
+           'dilatado': dilatado, 'en_excursion': exc_min is not None,
+           'media_muerta': media_muerta, 'origen_vigente': m * origen_v,
+           'fin_vigente': m * fin_v, 'zonas': zonas,
+           'nivel_activacion': zonas['activacion']}
+    if exc_min is not None:
+        # Clasificación de la excursión por la posición ACTUAL del precio:
+        # dentro del 19.1% = trabajando la zona del origen (operativa);
+        # más allá (hasta el 38.2) = Zona de Indecisión (inoperable).
+        impulso = fin_v - origen_v
+        limite_zona = origen_v - impulso * 0.191
+        close_v = m * float(df['close'].iloc[-1])
+        res['zona_origen_en_trabajo'] = close_v >= limite_zona
+        res['limite_zona_origen'] = m * limite_zona
+        res['nivel_muerte'] = m * (origen_v - impulso * 0.382)
+        res['extremo_excursion'] = m * exc_min
+    return res
 
 
 def get_active_zones(zone_data, direction, df, post_fin_idx):

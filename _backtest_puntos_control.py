@@ -61,7 +61,13 @@ for c in res['ciclos']:
         print(f" [--]     {etiqueta}: sin impulso medible")
     else:
         if ev['en_excursion']:
-            estado = "EN EXCURSIÓN bajo el origen (inoperable)"
+            if ev.get('zona_origen_en_trabajo'):
+                lado = "PARTE BAJA" if args.direction == "BULLISH" else "PARTE ALTA"
+                caja = ev['zonas']['BAJA'] if args.direction == "BULLISH" else ev['zonas']['ALTA']
+                estado = (f"TRABAJANDO {lado}: {min(caja):.2f} a {max(caja):.2f} "
+                          f"| muerte del ciclo en {ev['nivel_muerte']:.2f}")
+            else:
+                estado = f"EN ZONA DE INDECISIÓN (inoperable) | muerte del ciclo en {ev['nivel_muerte']:.2f}"
         elif ev['activado']:
             estado = f"ACTIVADO (tocó su 38.2 el {cot(ev['hora_activacion'])})"
         else:

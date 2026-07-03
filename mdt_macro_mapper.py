@@ -213,8 +213,25 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
     if ev['dilatado']:
         detalle += f" | origen dilatado a {ev['origen_vigente']:.2f} (re-medido)"
     if ev['en_excursion']:
-        if verbose:
-            print(f"{etiqueta} -> {detalle} | EN EXCURSIÓN bajo el origen (zona de indecisión): inoperable")
+        if ev.get('zona_origen_en_trabajo'):
+            # Sección 4/8: el primer 19.1% más allá del origen es la zona del origen
+            # (Parte Alta en bajista, Parte Baja en alcista). Zona operativa en
+            # trabajo; las zonas internas del ciclo se borran.
+            peso = c['peso']
+            if direction == "BULLISH":
+                caja = z['BAJA']
+                buys.append({"name": f"{nombre} (Baja)", "z": caja, "peso": peso})
+                lado = "PARTE BAJA (Compras)"
+            else:
+                caja = z['ALTA']
+                sells.append({"name": f"{nombre} (Alta)", "z": caja, "peso": peso})
+                lado = "PARTE ALTA (Ventas)"
+            if verbose:
+                print(f"{etiqueta} -> {detalle} | TRABAJANDO {lado}: {min(caja):.2f} a {max(caja):.2f} "
+                      f"| muerte del ciclo en {ev['nivel_muerte']:.2f}")
+        elif verbose:
+            print(f"{etiqueta} -> {detalle} | EN ZONA DE INDECISIÓN (superó el 19.1% del origen): "
+                  f"inoperable | muerte del ciclo en {ev['nivel_muerte']:.2f}")
         return
     if not ev['activado']:
         tipo = "COMPRAS" if direction == "BULLISH" else "VENTAS"
