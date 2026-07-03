@@ -277,21 +277,24 @@ def main():
                 current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
                 continue
 
-            # Use 'drop' instead of 'impulse' for bullish POCs
-            # Nota: si la cima del stack es un RESET (boundary), no tiene 'drop': se trata
-            # como límite de fractalidad impenetrable (inf) y no se puede engullir.
-            if valid_pocs_post_bull:
-                if biggest_bull_pb['drop'] > valid_pocs_post_bull[-1].get('drop', float('inf')):
-                    while valid_pocs_post_bull and biggest_bull_pb['drop'] > valid_pocs_post_bull[-1].get('drop', float('inf')):
-                        popped = valid_pocs_post_bull.pop()
-                        print(f"       -> [X] Nivel en {popped['trough']:.2f} invalidado (engullido por un fractal mayor).")
-                    biggest_bull_pb['is_boundary'] = True
-                    valid_pocs_post_bull.append(biggest_bull_pb)
-                    current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
-                    continue
-
             valid_pocs_post_bull.append(biggest_bull_pb)
             current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
+
+        # DESGRANE DEL RUIDO (Sección 2): "el retroceso mayor se come al menor".
+        # Recorrido cronológico (más antiguo primero): cada punto de control validado
+        # posteriormente con un grado (retroceso) mayor MATA a los anteriores menores.
+        # Los RESET (boundaries) son límites de fractalidad que el desgrane no cruza.
+        cronologico = list(reversed(valid_pocs_post_bull))
+        sobrevivientes = []
+        for poc in cronologico:
+            if poc.get('is_boundary'):
+                sobrevivientes.append(poc)
+                continue
+            while sobrevivientes and not sobrevivientes[-1].get('is_boundary') and sobrevivientes[-1]['drop'] < poc['drop']:
+                popped = sobrevivientes.pop()
+                print(f"       -> [X] Punto de control en {popped['trough']:.2f} MUERE (desgrane: retroceso mayor posterior en {poc['trough']:.2f}).")
+            sobrevivientes.append(poc)
+        valid_pocs_post_bull = list(reversed(sobrevivientes))
 
         nivel_pb = 1
         for poc in reversed(valid_pocs_post_bull):
