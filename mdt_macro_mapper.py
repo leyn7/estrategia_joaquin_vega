@@ -1,12 +1,21 @@
-"""Motor Estructural Universal MDT (dual-timeframe 1D -> 2H -> 30m).
+# -*- coding: utf-8 -*-
+"""Motor Estructural Universal MDT — mapa cronológico multi-tramo.
 
-Mapea ciclos macro y sub-ciclos (alcista, bajista y alcista post-fondo),
-aplica la regla del 61.8%, desgrana POCs con stack monótono y resuelve
-la concurrencia global de zonas (Sección 19 de la estrategia).
+Tres reglas de arquitectura (usuario, 3 jul 2026):
+ 1. La resolución del mapa es independiente de la TF de operación: la cascada de
+    extracción SIEMPRE baja hasta 1m en el tramo interno (fractalidad infinita: un
+    retroceso validado en TF fina es invisible en velas gruesas — caso 561.93 en 3m
+    enterrando al 559.06 del 15m).
+ 2. Mapa vivo: generar_mapa(cutoff) reconstruye el mapa exacto en cualquier instante;
+    cada ciclo se sigue vela a vela (validación, desgrane, muerte 138.2, dilatación,
+    activación 38.2) — nunca contra una foto fija.
+ 3. El mapa es la única fuente de anclas: el escáner debe consultar los ciclos
+    devueltos (y su estado VIVO) antes de armar o disparar cualquier patrón.
 """
+import pandas as pd
 from mdt_data import get_binance_klines
-from mdt_math import calc_zones, get_active_zones, apply_concurrency, format_z
-from mdt_fractal import get_bullish_poc, get_bearish_poc
+from mdt_math import evaluar_ciclo, apply_concurrency, format_z
+from mdt_fractal import extraer_puntos_control
 
 # --- Configuración ---
 SYMBOL = "BNBUSDT"
@@ -14,130 +23,203 @@ SYMBOL = "BNBUSDT"
 # junio 2022 en ~183 USDT). Se localiza la ÚLTIMA vela diaria cuyo low cae en la banda.
 ORIGEN_MACRO_BANDA = (182.0, 183.5)
 
+# Cascada de temporalidades, de gruesa a fina (Regla 1: siempre termina en 1m)
+TF_LADDER = ["1d", "2h", "30m", "3m", "1m"]
+TF_MINUTOS = {"1d": 1440, "2h": 120, "30m": 30, "3m": 3, "1m": 1}
+MIN_VELAS_TF = 40          # una TF con menos velas que esto no aporta estructura
+MAX_VELAS_DESCARGA = 15000  # presupuesto de velas por descarga (1m -> ~10 días de cola)
 
-def registrar_ciclo(label, name, zona, direction, df, post_idx, peso, tipo_alerta, buys, sells, alerts):
-    """Imprime el ciclo, evalúa activación/muerte y registra sus zonas activas o su alerta.
 
-    Reparto de zonas según dirección:
-      BULLISH -> Compras: Baja y Media | Ventas: Alta
-      BEARISH -> Compras: Baja | Ventas: Alta y Media
+def _ahora():
+    return pd.Timestamp.now(tz='UTC').tz_localize(None)
+
+
+def _descargar(tf, desde=None, cutoff=None):
+    start = pd.Timestamp(desde).tz_localize('UTC') if desde is not None else None
+    df = get_binance_klines(SYMBOL, tf, start_time=start)
+    if cutoff is not None:
+        df = df[df['open_time'] <= cutoff]
+    return df.reset_index(drop=True)
+
+
+def _tf_para_span(span_min):
+    """La TF más fina cuyo número de velas cabe en el presupuesto."""
+    for tf in reversed(TF_LADDER):
+        if span_min / TF_MINUTOS[tf] <= MAX_VELAS_DESCARGA:
+            return tf
+    return TF_LADDER[0]
+
+
+def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True):
+    """Cascada de extracción cronológica sobre un tramo (Regla 1).
+
+    Cada TF más fina re-escanea TODO el tramo (o hasta donde alcance su presupuesto
+    de velas): un punto de control asesino puede esconderse dentro de CUALQUIER vela
+    gruesa del tramo, no solo al final (caso 561.93: con el tramo extendido al 3 jul,
+    un zoom "desde el CP más profundo" se saltaba su escondite del 2 jul 08:30 y el
+    559.06 revivía). La deduplicación por ancla y el desgrane posicional entre
+    temporalidades resuelven el solape entre TFs.
+
+    inicio / fin_limite / cutoff en UTC naive; fin_limite es cota EXCLUSIVA del tramo
+    (None = hasta el cutoff/presente: el extremo es el extremo corrido).
+    Devuelve {'cps', 'cronologia', 'origen', 'origen_time', 'extremo', 'tf_macro'}.
     """
-    status = get_active_zones(zona, direction, df, post_idx)
-    print(f"[{label}] Origen: {zona['origen']:.2f} | Fin: {zona['fin']:.2f}")
+    bull = direction == "BULLISH"
+    mapa, cronologia = [], []
+    inicio_tramo = pd.Timestamp(inicio)
+    limite = pd.Timestamp(fin_limite) if fin_limite is not None else (cutoff or _ahora())
+    origen_val = origen_time = extremo_val = tf_macro = None
 
-    if status["CYCLE_DEAD"]:
-        return status
+    for tf in TF_LADDER:
+        span_min = max((limite - inicio_tramo).total_seconds() / 60.0, 0)
+        n_est = span_min / TF_MINUTOS[tf]
+        if tf != TF_LADDER[-1] and n_est < MIN_VELAS_TF:
+            continue  # tramo demasiado corto para esta TF: bajar directo a una más fina
+        desde = inicio_tramo
+        if n_est > MAX_VELAS_DESCARGA:
+            desde = limite - pd.Timedelta(minutes=MAX_VELAS_DESCARGA * TF_MINUTOS[tf])
+            if verbose:
+                print(f"   [!] {tf}: tramo más largo que el presupuesto; se cubre desde {desde}")
+        df_tf = _descargar(tf, desde, cutoff)
+        if fin_limite is not None:
+            df_tf = df_tf[df_tf['open_time'] < pd.Timestamp(fin_limite)].reset_index(drop=True)
+        if len(df_tf) < 6:
+            continue
 
-    if status["ALTA"] or status["MEDIA"] or status["BAJA"]:
-        if direction == "BULLISH":
-            if status["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": zona['BAJA'], "peso": peso})
-            if status["MEDIA"]: buys.append({"name": f"{name} (Media)", "z": zona['MEDIA'], "peso": peso})
-            if status["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": zona['ALTA'], "peso": peso})
+        if bull:
+            o_idx = int(df_tf['low'].idxmin())
+            e_idx = int(df_tf.loc[o_idx:, 'high'].idxmax())
         else:
-            if status["BAJA"]: buys.append({"name": f"{name} (Baja)", "z": zona['BAJA'], "peso": peso})
-            if status["ALTA"]: sells.append({"name": f"{name} (Alta)", "z": zona['ALTA'], "peso": peso})
-            if status["MEDIA"]: sells.append({"name": f"{name} (Media)", "z": zona['MEDIA'], "peso": peso})
-    else:
-        alerts.append({"name": name, "activacion": zona['activacion'], "zona_alerta": zona['MEDIA'], "tipo": tipo_alerta})
-    return status
+            o_idx = int(df_tf['high'].idxmax())
+            e_idx = int(df_tf.loc[o_idx:, 'low'].idxmin())
+        if e_idx <= o_idx:
+            continue
+        if tf_macro is None:
+            tf_macro = tf
+            origen_val = float(df_tf.loc[o_idx, 'low' if bull else 'high'])
+            origen_time = df_tf.loc[o_idx, 'open_time']
+        extremo_val = float(df_tf.loc[e_idx, 'high' if bull else 'low'])
+
+        if verbose:
+            print(f"   >>> [{tf}] extracción desde {df_tf.loc[o_idx, 'open_time']} "
+                  f"hasta {df_tf.loc[e_idx, 'open_time']}")
+        res = extraer_puntos_control(df_tf, o_idx, e_idx, direction)
+
+        for ev in res['eventos']:
+            ev['tf'] = tf
+            ev['time'] = df_tf.loc[ev['idx'], 'open_time']
+            if 'trough_idx' in ev:
+                ev['trough_time'] = df_tf.loc[ev['trough_idx'], 'open_time']
+            cronologia.append(ev)
+
+        for cpv in res['vivos']:
+            cp = {'trough': cpv['trough'], 'grado': cpv['grado'], 'peak': cpv['peak'], 'tf': tf,
+                  'trough_time': df_tf.loc[cpv['trough_idx'], 'open_time'],
+                  'valid_time': df_tf.loc[cpv['valid_idx'], 'open_time']}
+            # las anclas gruesas reaparecen al re-escanear en fina: no duplicar
+            if any(abs(x['trough'] - cp['trough']) < 1e-9 for x in mapa):
+                continue
+            # un CP del pool con ancla posterior y grado mayor ya habría matado a este
+            if any(x['trough_time'] > cp['trough_time'] and x['grado'] > cp['grado'] for x in mapa):
+                continue
+            for x in list(mapa):
+                if x['trough_time'] < cp['trough_time'] and x['grado'] < cp['grado']:
+                    cronologia.append({'tipo': 'MUERE', 'tf': tf, 'time': cp['valid_time'],
+                                       'trough': x['trough'], 'grado': x['grado'],
+                                       'causa': f"DESGRANE (cascada {x['tf']}->{tf})",
+                                       'asesino': cp['trough'], 'grado_asesino': cp['grado']})
+                    mapa.remove(x)
+            mapa.append(cp)
+
+    mapa.sort(key=lambda x: x['trough_time'])
+    return {'cps': mapa, 'cronologia': cronologia, 'origen': origen_val,
+            'origen_time': origen_time, 'extremo': extremo_val, 'tf_macro': tf_macro}
 
 
-# Cascada de zoom: tras 2 POCs reales en la TF actual se baja a la siguiente, si el tramo
-# restante es abordable (la fractalidad es infinita: un retroceso validado en TF fina
-# invalida puntos de control menores previos, y en velas gruesas es invisible).
-TF_CASCADA = ["2h", "30m", "3m", "1m"]
-TF_MAX_DIAS_RESTANTES = {"30m": None, "3m": 12, "1m": 4}
+def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=True):
+    """Extrae los puntos de control del tramo (Regla 1) y sigue cada ciclo vela a vela
+    hasta el cutoff/presente (Regla 2). Devuelve los ciclos con su estado — la fuente
+    única de anclas para el escáner (Regla 3)."""
+    ext = extraer_mapa_tramo(inicio, fin_limite, direction, cutoff, verbose)
+    if ext['origen'] is None:
+        return None
+
+    ciclos = [{'nombre': f"Macro {nombre}", 'ancla': ext['origen'], 'grado': None,
+               'tf': ext['tf_macro'], 'ancla_time': ext['origen_time'], 'es_macro': True}]
+    for k, cp in enumerate(ext['cps'], start=1):
+        ciclos.append({'nombre': f"Sub-C {nombre} Nivel {k}", 'ancla': cp['trough'],
+                       'grado': cp['grado'], 'tf': cp['tf'], 'ancla_time': cp['trough_time'],
+                       'es_macro': False})
+
+    # Evaluación cronológica de cada ciclo: una descarga por TF desde el ancla más antigua
+    por_tf = {}
+    for c in ciclos:
+        limite = cutoff or _ahora()
+        span_min = (limite - c['ancla_time']).total_seconds() / 60.0
+        tf_eval = c['tf']
+        if span_min / TF_MINUTOS[tf_eval] > MAX_VELAS_DESCARGA:
+            tf_eval = _tf_para_span(span_min)
+        por_tf.setdefault(tf_eval, []).append(c)
+    for tf_eval, lista in por_tf.items():
+        desde = min(c['ancla_time'] for c in lista)
+        df_eval = _descargar(tf_eval, desde, cutoff)
+        for c in lista:
+            idx0 = int(df_eval['open_time'].searchsorted(c['ancla_time']))
+            c['eval'] = evaluar_ciclo(c['ancla'], df_eval, idx0, direction)
+
+    ext['ciclos'] = ciclos
+    return ext
 
 
-def extraer_pocs_zoom(direction, start_date, extremo_label):
-    """Zoom en cascada 2H -> 30m -> 3m -> 1m: recolecta POCs con stack monótono desde
-    start_date hasta el extremo.
+def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
+    """Registra las zonas operativas (o la alerta) de un ciclo según su estado.
 
-    Devuelve (pocs, df_zoom, extremo_idx). Los RESET 61.8% quedan marcados con
-    is_boundary=True (límite de fractalidad) y engullen los niveles menores previos.
-    Desgrane del Ruido (Sección 2): un punto de control validado posteriormente con
-    grado (retroceso) mayor MATA a los anteriores menores; el RESET frena el desgrane.
+    Reparto: BULLISH -> Compras: Baja y Media | Ventas: Alta
+             BEARISH -> Compras: Baja | Ventas: Alta y Media
     """
-    dir_bull = direction == "BULLISH"
-    get_poc = get_bullish_poc if dir_bull else get_bearish_poc
-    key = 'trough' if dir_bull else 'peak'
-    key_idx = 'trough_idx' if dir_bull else 'peak_idx'
-    grade_key = 'drop' if dir_bull else 'bounce'
+    ev = c['eval']
+    nombre = c['nombre']
+    etiqueta = f"[{nombre.upper()} ({c['tf'].upper()})] ancla {c['ancla']:.2f}"
 
-    print(f"   >>> HACIENDO ZOOM A 2H PARA EXTRACCIÓN {extremo_label} (Desde: {start_date})")
-    df_zoom = get_binance_klines(SYMBOL, "2h", start_time=start_date)
-    extremo_idx = df_zoom['high'].idxmax() if dir_bull else df_zoom['low'].idxmin()
-    search_idx = 0
-    pocs = []
-    tf = "2h"
-    pocs_desde_swap = 0
+    if ev['estado'] == 'MUERTO':
+        if verbose:
+            print(f"{etiqueta} -> MUERTO: tocó su 138.2 ({ev['nivel_muerte']:.2f}) el {ev['hora_muerte']}")
+        return
+    if ev['estado'] == 'SIN_IMPULSO':
+        if verbose:
+            print(f"{etiqueta} -> sin impulso medible todavía")
+        return
 
-    while search_idx < extremo_idx:
-        # Hot-swap en cascada a la siguiente TF más fina
-        if pocs_desde_swap >= 2 and tf != TF_CASCADA[-1]:
-            tf_next = TF_CASCADA[TF_CASCADA.index(tf) + 1]
-            max_dias = TF_MAX_DIAS_RESTANTES.get(tf_next)
-            dias_restantes = (df_zoom.loc[extremo_idx, 'open_time'] - df_zoom.loc[search_idx, 'open_time']).days
-            if max_dias is None or dias_restantes <= max_dias:
-                switch_time = df_zoom.loc[search_idx, 'open_time']
-                print(f"   >>> HACIENDO ZOOM A {tf_next.upper()} PARA EXTRACCIÓN MICRO (Desde: {switch_time})")
-                df_zoom = get_binance_klines(SYMBOL, tf_next, start_time=switch_time)
-                extremo_idx = df_zoom['high'].idxmax() if dir_bull else df_zoom['low'].idxmin()
-                search_idx = 0
-                tf = tf_next
-                pocs_desde_swap = 0
+    z = ev['zonas']
+    detalle = f"fin {ev['fin_vigente']:.2f}"
+    if ev['dilatado']:
+        detalle += f" | origen dilatado a {ev['origen_vigente']:.2f} (re-medido)"
+    if ev['en_excursion']:
+        if verbose:
+            print(f"{etiqueta} -> {detalle} | EN EXCURSIÓN bajo el origen (zona de indecisión): inoperable")
+        return
+    if not ev['activado']:
+        tipo = "COMPRAS" if direction == "BULLISH" else "VENTAS"
+        alerts.append({'name': nombre, 'activacion': ev['nivel_activacion'],
+                       'zona_alerta': z['MEDIA'], 'tipo': tipo})
+        if verbose:
+            print(f"{etiqueta} -> {detalle} | EN ALERTA: se activa al tocar su 38.2 ({ev['nivel_activacion']:.2f})")
+        return
 
-        poc = get_poc(df_zoom, search_idx, extremo_idx)
-        if poc is None: break
-
-        # Prevent duplication after timeframe swap
-        if pocs and poc[key] == pocs[-1].get(key):
-            search_idx = int(poc[key_idx])
-            continue
-
-        poc['tf'] = tf
-
-        if poc.get('type') == 'RESET':
-            # Pop de niveles engullidos (bull: troughs más altos; bear: peaks más bajos)
-            while pocs and (pocs[-1].get(key, 0) > poc[key] if dir_bull else pocs[-1].get(key, 0) < poc[key]):
-                popped = pocs.pop()
-                print(f"       -> [X] Nivel en {popped[key]:.2f} invalidado (engullido por el reset).")
-
-            # Añadir a la lista solo para registro cronológico visual
-            poc['is_boundary'] = True
-            pocs.append(poc)
-            search_idx = int(poc[key_idx])
-            continue
-
-        # DESGRANE DEL RUIDO (Sección 2): "el retroceso mayor se come al menor".
-        # Este POC (posterior) con grado mayor mata a los anteriores menores.
-        while pocs and not pocs[-1].get('is_boundary') and pocs[-1][grade_key] < poc[grade_key]:
-            popped = pocs.pop()
-            print(f"       -> [X] Punto de control en {popped[key]:.2f} (grado {popped[grade_key]:.2f}) MUERE (desgrane: posterior mayor {poc[grade_key]:.2f}).")
-
-        pocs.append(poc)
-        search_idx = int(poc[key_idx])
-        pocs_desde_swap += 1
-
-    return pocs, df_zoom, extremo_idx
-
-
-def procesar_pocs(pocs, direction, fin_val, df_zoom, extremo_idx, base_nombre, boundary_label,
-                  tipo_alerta, buys, sells, alerts):
-    """Convierte cada POC extraído en un sub-ciclo con zonas (niveles desde el 2)."""
-    key = 'trough' if direction == "BULLISH" else 'peak'
-    nivel = 2
-    for poc in pocs:
-        tf_label = poc.get('tf', '2h').upper()
-        if poc.get('is_boundary'):
-            print(f"[{boundary_label}] Origen: {poc[key]:.2f} | Fin: {fin_val:.2f} -> Límite de fractalidad")
-            continue
-
-        zona = calc_zones(poc[key], fin_val, direction)
-        name = f"{base_nombre} Nivel {nivel}"
-        registrar_ciclo(f"{name.upper()} ({tf_label})", name, zona, direction, df_zoom, extremo_idx,
-                        100 - nivel, tipo_alerta, buys, sells, alerts)
-        nivel += 1
+    if verbose:
+        media_txt = " | media MUERTA (tocó el 100%)" if ev['media_muerta'] else ""
+        print(f"{etiqueta} -> {detalle} | ACTIVADO ({ev['hora_activacion']}){media_txt}")
+    peso = c['peso']
+    if direction == "BULLISH":
+        buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso})
+        if not ev['media_muerta']:
+            buys.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso})
+        sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso})
+    else:
+        buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso})
+        sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso})
+        if not ev['media_muerta']:
+            sells.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso})
 
 
 def resolver_concurrencia(zonas, buy_or_sell, current_price=None):
@@ -174,196 +256,85 @@ def resolver_concurrencia(zonas, buy_or_sell, current_price=None):
     return finales
 
 
-def main():
-    print("\n" + "="*70)
-    print(" MOTOR ESTRUCTURAL UNIVERSAL MDT (DUAL-TIMEFRAME 1D -> 2H)")
-    print("="*70 + "\n")
+def generar_mapa(cutoff=None, verbose=True):
+    """Reconstruye el mapa completo en el instante `cutoff` (Regla 2; None = ahora).
 
-    # ---------------------------------------------------------
-    # PASO 1: VISIÓN MACRO (1D)
-    # ---------------------------------------------------------
-    df_1d = get_binance_klines(SYMBOL, "1d")
+    Devuelve {'ciclos', 'buys', 'sells', 'alerts', 'precio'}: los ciclos traen estado
+    (VIVO/MUERTO, activación, dilatación) — Regla 3: el escáner opera SOLO anclas de
+    ciclos VIVOS de esta estructura.
+    """
+    if verbose:
+        print("\n" + "=" * 70)
+        print(" MOTOR ESTRUCTURAL UNIVERSAL MDT (MAPA CRONOLÓGICO, CASCADA A 1M)")
+        print("=" * 70 + "\n")
 
-    # Origen del macro alcista: última vela diaria cuyo low cae en la banda configurada
+    df_1d = _descargar("1d", None, cutoff)
+
     en_banda = df_1d[(df_1d['low'] > ORIGEN_MACRO_BANDA[0]) & (df_1d['low'] < ORIGEN_MACRO_BANDA[1])]
     if en_banda.empty:
         raise RuntimeError(f"No se encontró el origen macro alcista de {SYMBOL} en la banda {ORIGEN_MACRO_BANDA}. "
                            "Revisar ORIGEN_MACRO_BANDA (análisis de muñecas rusas).")
-    start_bull_idx = en_banda.index[-1]
+    start_bull_idx = int(en_banda.index[-1])
+    ath_idx = int(df_1d['high'].idxmax())
+    bottom_idx = int(df_1d.loc[ath_idx:, 'low'].idxmin())
 
-    ath_idx = df_1d['high'].idxmax()
-    abs_max = df_1d.loc[ath_idx]['high']
+    un_dia = pd.Timedelta(days=1)
+    rutas = [
+        ("Alcista", df_1d.loc[start_bull_idx, 'open_time'], df_1d.loc[ath_idx, 'open_time'] + un_dia,
+         "BULLISH", 100),
+        ("Bajista", df_1d.loc[ath_idx, 'open_time'], df_1d.loc[bottom_idx, 'open_time'] + un_dia,
+         "BEARISH", 100),
+        ("Alcista Post-F", df_1d.loc[bottom_idx, 'open_time'], None, "BULLISH", 96),
+    ]
 
-    df_post_ath = df_1d.loc[ath_idx:]
-    bottom_idx = df_post_ath['low'].idxmin()
-    abs_min = df_post_ath.loc[bottom_idx]['low']
+    buys, sells, alerts, ciclos_todos = [], [], [], []
+    for nombre, ini, fin, direction, peso_base in rutas:
+        if verbose:
+            print(f"\n--- RUTA {nombre.upper()} ({direction}) ---")
+        res = analizar_tramo(nombre, ini, fin, direction, cutoff, verbose)
+        if res is None:
+            continue
+        for j, c in enumerate(res['ciclos']):
+            c['peso'] = peso_base - j
+            c['ruta'] = nombre
+            c['direction'] = direction
+            ciclos_todos.append(c)
+            _registrar_ciclo(c, direction, buys, sells, alerts, verbose)
 
-    print("--- 1. IDENTIFICACIÓN Y ACTIVACIÓN DE CICLOS ---")
+    current_price = float(df_1d.iloc[-1]['close'])
 
-    buys = []
-    sells = []
-    alerts = []
-
-    # =========================================================================
-    # RUTA ALCISTA
-    # =========================================================================
-    macro_bull = calc_zones(df_1d.loc[start_bull_idx]['low'], abs_max, "BULLISH")
-    registrar_ciclo("MACRO ALCISTA (1D)", "Macro Alcista", macro_bull, "BULLISH", df_1d, ath_idx,
-                    100, "COMPRAS", buys, sells, alerts)
-
-    # Regla 61.8%: si el retroceso barrió la zona media macro, la fractalidad menor quedó obsoleta
-    lowest_post_ath = df_1d.loc[ath_idx:, 'low'].min()
-    nivel_618_macro = macro_bull['MEDIA'][0]
-    frenar_bull = lowest_post_ath <= nivel_618_macro
-    if frenar_bull:
-        print(f"   [!] REGLA 61.8%: El precio cayó a {lowest_post_ath:.2f}, barriendo el 61.8% ({nivel_618_macro:.2f}). Se frena búsqueda recursiva en Nivel 1.")
-
-    biggest_bull = get_bullish_poc(df_1d, start_bull_idx, ath_idx)
-    if biggest_bull:
-        sub_bull = calc_zones(biggest_bull['trough'], abs_max, "BULLISH")
-        registrar_ciclo("SUB-C ALCISTA NIVEL 1 (1D)", "Sub-C Alcista Nivel 1", sub_bull, "BULLISH",
-                        df_1d, ath_idx, 99, "COMPRAS", buys, sells, alerts)
-
-        # ZOOM A 2H PARA EL RESTO (Si no se frenó en 1)
-        if not frenar_bull:
-            trough_date = df_1d.loc[biggest_bull['trough_idx'], 'open_time']
-            pocs, df_zoom, extremo_idx = extraer_pocs_zoom("BULLISH", trough_date, "ALCISTA")
-            procesar_pocs(pocs, "BULLISH", abs_max, df_zoom, extremo_idx, "Sub-C Alcista",
-                          "PISO ESTRUCTURAL (RESET 61.8%)", "COMPRAS", buys, sells, alerts)
-
-    # =========================================================================
-    # RUTA BAJISTA
-    # =========================================================================
-    print("")
-    macro_bear = calc_zones(abs_max, abs_min, "BEARISH")
-    registrar_ciclo("MACRO BAJISTA (1D)", "Macro Bajista", macro_bear, "BEARISH", df_1d, bottom_idx,
-                    100, "VENTAS", buys, sells, alerts)
-
-    highest_post_bottom = df_1d.loc[bottom_idx:, 'high'].max() if bottom_idx < len(df_1d)-1 else abs_min
-    nivel_618_macro_bear = macro_bear['MEDIA'][1]
-    frenar_bear = highest_post_bottom >= nivel_618_macro_bear
-    if frenar_bear:
-        print(f"   [!] REGLA 61.8%: El precio subió a {highest_post_bottom:.2f}, barriendo el 61.8% ({nivel_618_macro_bear:.2f}). Se frena búsqueda recursiva en Nivel 1.")
-
-    biggest_bear = get_bearish_poc(df_1d, ath_idx, bottom_idx)
-    if biggest_bear:
-        sub_bear = calc_zones(biggest_bear['peak'], abs_min, "BEARISH")
-        registrar_ciclo("SUB-C BAJISTA NIVEL 1 (1D)", "Sub-C Bajista Nivel 1", sub_bear, "BEARISH",
-                        df_1d, bottom_idx, 99, "VENTAS", buys, sells, alerts)
-
-        # ZOOM A 2H PARA EL RESTO
-        if not frenar_bear:
-            peak_date = df_1d.loc[biggest_bear['peak_idx'], 'open_time']
-            pocs, df_zoom, extremo_idx = extraer_pocs_zoom("BEARISH", peak_date, "BAJISTA")
-            procesar_pocs(pocs, "BEARISH", abs_min, df_zoom, extremo_idx, "Sub-C Bajista",
-                          "TECHO ESTRUCTURAL (RESET 61.8%)", "VENTAS", buys, sells, alerts)
-
-    # =========================================================================
-    # RUTA ALCISTA POST-FONDO (REBOTE)
-    # =========================================================================
-    bottom_date = df_1d.loc[bottom_idx, 'open_time']
-
-    # La extracción post-fondo va en TF FINA: la fractalidad es infinita y un retroceso
-    # validado en 1m invalida puntos de control menores previos (un swing de minutos es
-    # invisible dentro de una vela de 30m). TF según la edad del rebote, medida con los
-    # propios datos (backtest-safe).
-    span_days = (df_1d.iloc[-1]['open_time'] - bottom_date).days
-    tf_pb = "1m" if span_days <= 4 else ("3m" if span_days <= 12 else "30m")
-    tf_pb_label = tf_pb.upper()
-    print(f"\n   >>> HACIENDO ZOOM A {tf_pb_label} PARA EXTRACCIÓN ALCISTA POST-FONDO (Desde: {bottom_date})")
-
-    df_post = get_binance_klines(SYMBOL, tf_pb, start_time=bottom_date)
-    bottom_idx_post = df_post['low'].idxmin()
-
-    post_bottom_df = df_post.loc[bottom_idx_post:]
-    highest_post_bottom_idx = post_bottom_df['high'].idxmax()
-
-    if highest_post_bottom_idx > bottom_idx_post:
-        abs_max_post = df_post.loc[highest_post_bottom_idx, 'high']
-        print(f"--- 1.5. EXTRACCIÓN ALCISTA POST-FONDO (Rebote a {abs_max_post:.2f}) ---")
-
-        abs_min_post = df_post.loc[bottom_idx_post, 'low']
-
-        # Absolute post-bottom cycle
-        macro_pb = calc_zones(abs_min_post, abs_max_post, "BULLISH")
-        registrar_ciclo(f"MACRO ALCISTA POST-FONDO ({tf_pb_label})", "Macro Alcista Post-F", macro_pb, "BULLISH",
-                        df_post, highest_post_bottom_idx, 96, "COMPRAS", buys, sells, alerts)
-
-        # Recolección de POCs post-fondo: búsqueda FORWARD (igual que la ruta principal,
-        # avanzando desde el fondo hacia el techo del rebote). Así el primer POC es el de
-        # retroceso mayor (que implícitamente entierra a los anteriores menores — Desgrane
-        # del Ruido, Sección 2) y los siguientes son las muñecas rusas posteriores menores.
-        valid_pocs_post_bull = []
-        current_search_idx_pb = bottom_idx_post
-
-        while current_search_idx_pb < highest_post_bottom_idx:
-            biggest_bull_pb = get_bullish_poc(df_post, current_search_idx_pb, highest_post_bottom_idx)
-            if biggest_bull_pb is None: break
-
-            # Prevent duplication (mismo trough devuelto de nuevo)
-            if valid_pocs_post_bull and biggest_bull_pb.get('trough') == valid_pocs_post_bull[-1].get('trough'):
-                current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
-                continue
-
-            if biggest_bull_pb.get('type') == 'RESET':
-                while valid_pocs_post_bull and valid_pocs_post_bull[-1].get('trough', 0) > biggest_bull_pb['trough']:
-                    popped = valid_pocs_post_bull.pop()
-                    print(f"       -> [X] Nivel en {popped['trough']:.2f} invalidado (engullido por el reset).")
-                biggest_bull_pb['is_boundary'] = True
-                valid_pocs_post_bull.append(biggest_bull_pb)
-                current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
-                continue
-
-            # DESGRANE DEL RUIDO (Sección 2, red de seguridad): "el retroceso mayor se come
-            # al menor". Si este POC (posterior) validó un grado mayor, mata a los anteriores
-            # menores. Los RESET son límites de fractalidad que el desgrane no cruza.
-            while valid_pocs_post_bull and not valid_pocs_post_bull[-1].get('is_boundary') \
-                    and valid_pocs_post_bull[-1]['drop'] < biggest_bull_pb['drop']:
-                popped = valid_pocs_post_bull.pop()
-                print(f"       -> [X] Punto de control en {popped['trough']:.2f} MUERE (desgrane: retroceso mayor posterior en {biggest_bull_pb['trough']:.2f}).")
-
-            valid_pocs_post_bull.append(biggest_bull_pb)
-            current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
-
-        nivel_pb = 1
-        for poc in valid_pocs_post_bull:
-            if poc.get('is_boundary'):
-                print(f"[FONDO ESTRUCTURAL POST (RESET)] Origen: {poc['trough']:.2f} | Fin: {abs_max_post:.2f}")
-                continue
-
-            pb_bull = calc_zones(poc['trough'], abs_max_post, "BULLISH")
-            name = f"Sub-C Alcista Post-F Nivel {nivel_pb}"
-            registrar_ciclo(f"{name.upper()} ({tf_pb_label})", name, pb_bull, "BULLISH", df_post,
-                            highest_post_bottom_idx, 95 - nivel_pb, "COMPRAS", buys, sells, alerts)
-            nivel_pb += 1
-
-    # =========================================================================
-    # CONCURRENCIA GLOBAL
-    # =========================================================================
-    print("\n--- 2. CONCURRENCIA GLOBAL DE ZONAS ACTIVAS ---")
-    current_price = df_1d.iloc[-1]['close']
-
-    print("\n[ZONAS DE COMPRAS]")
+    if verbose:
+        print("\n--- CONCURRENCIA GLOBAL DE ZONAS ACTIVAS ---")
+        print("\n[ZONAS DE COMPRAS]")
     final_buys = resolver_concurrencia(buys, "BUY", current_price)
-
-    print("\n[ZONAS DE VENTAS]")
+    if verbose:
+        print("\n[ZONAS DE VENTAS]")
     final_sells = resolver_concurrencia(sells, "SELL", current_price)
 
-    print("\n--- 3. ZONAS OPERATIVAS FINALES ---")
-    print("ZONAS DE VENTAS:")
-    for s in final_sells:
-        print(f" -> {s['name']}: {format_z(s['z'])}")
-    print("\nZONAS DE COMPRAS:")
-    for b in final_buys:
-        print(f" -> {b['name']}: {format_z(b['z'])}")
+    if verbose:
+        print("\n--- ZONAS OPERATIVAS FINALES ---")
+        print("ZONAS DE VENTAS:")
+        for s in final_sells:
+            print(f" -> {s['name']}: {format_z(s['z'])}")
+        print("\nZONAS DE COMPRAS:")
+        for b in final_buys:
+            print(f" -> {b['name']}: {format_z(b['z'])}")
+        if alerts:
+            print("\n--- ZONAS EN EVOLUCION (ALERTAS NO ACTIVADAS) ---")
+            for a in alerts:
+                print(f" -> {a['name']}: Si el precio toca {a['activacion']:.2f} (38.2%), "
+                      f"se activará Zona de {a['tipo']} en {format_z(a['zona_alerta'])}")
+        print(f"\nPRECIO ACTUAL: {current_price:.2f}")
 
-    if alerts:
-        print("\n--- 4. ZONAS EN EVOLUCION (ALERTAS NO ACTIVADAS) ---")
-        for a in alerts:
-            print(f" -> {a['name']}: Si el precio toca {a['activacion']:.2f} (38.2%), se activará Zona de {a['tipo']} en {format_z(a['zona_alerta'])}")
+    return {'ciclos': ciclos_todos, 'buys': final_buys, 'sells': final_sells,
+            'alerts': alerts, 'precio': current_price}
 
-    print(f"\nPRECIO ACTUAL: {current_price:.2f}")
+
+def ancla_viva(mapa, ancla, tol=1e-6):
+    """Regla 3 (candado mapa->escáner): ¿el ancla sigue siendo un ciclo VIVO del mapa?"""
+    return any(abs(c['ancla'] - ancla) <= tol and c['eval']['estado'] == 'VIVO'
+               for c in mapa['ciclos'])
 
 
 if __name__ == "__main__":
-    main()
+    generar_mapa()
