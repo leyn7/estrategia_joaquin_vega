@@ -1,0 +1,803 @@
+lo mejor siempre es verlo en gráfico por
+
+tanto vamos a verlo en gráfico
+
+mira
+
+vamos a movimientos cualquiera
+
+imaginaros por ejemplo este movimiento
+
+os vais a dar cuenta de que la
+
+metodología en diferentes momentos os va
+
+a pedir
+
+vais a tener que hacer digamos
+
+el desgrane como yo lo llamo tenemos que
+
+desgranar un movimiento para localizar
+
+sus puntos de control correctos y vamos
+
+a tener que hacerlo de dos formas uno
+
+cuando el movimiento ya está hecho el
+
+método en un momento dado te dirá
+
+necesitas
+
+necesitamos que des grandes mediante
+
+puntos de control por ejemplo esta
+
+subida
+
+fijaros desde este mínimo vamos a
+
+suponer que tenemos hasta este máximo y
+
+necesitamos desgranar mediante puntos de
+
+control
+
+toda esa subida
+
+quiero que os deis cuenta del protocolo
+
+que vamos a seguir es imprescindible que
+
+os deis cuenta del protocolo que vamos a
+
+seguir
+
+acordaros fractales menores dan lugar a
+
+fractales mayores fractales menores
+
+quedan obsoletos dando lugar a fractales
+
+mayores mirar acordaros de lo que es un
+
+fractal un fractal es un movimiento de
+
+impulso que tiene que dejar ahí un
+
+máximo tiene que dejar una secuencia de
+
+dos velas a izquierda dos velas a
+
+derecha en el momento que eso suceda
+
+tendré el primer fractal de acuerdo
+
+vamos a verlo en el gráfico fijaros
+
+desde un punto de origen cualquiera
+
+el precio tira hasta que nos deje el
+
+primer máximo fijaros
+
+pam
+
+ese punto álgido tiene dos velas
+
+cerradas a izquierda y tiene dos velas
+
+cerradas a derecha perfecto eso quiere
+
+decir que ahí tengo mi primer fractal
+
+ahí está
+
+bien para que yo pueda decir que tengo
+
+un primer punto de control correcto yo
+
+necesito que el precio supere
+
+el máximo del fractal al menos con un
+
+tercio de la altura que me deje ese
+
+retroceso perfecto yo necesito que el
+
+precio supere ese nivel
+
+al menos con un tercio de la altura que
+
+tiene ese retroceso fijaros que yo lo
+
+hago esto de una forma muy sencilla
+
+mirad yo cojo y mido
+
+a esa altura y digo mira tienes 122 pips
+
+cojo mi calculadora la pongo aquí y digo
+
+me da 122 entre 3 entre ese tercio tú
+
+tienes que superar al menos 40 pips
+
+perfecto fijaros
+
+el precio hace un primer intento
+
+hace un primer intento superas 40 pips
+
+ese nivel
+
+26 no falsa rotura falsa rotura el
+
+precio me hace un primer intento falsa
+
+rotura el precio me hace un primer
+
+intento de falsa rotura no
+
+seguimos laterales dentro de esa primera
+
+fractalidad que hace el precio el precio
+
+hace un mínimo más bajó el precio hace
+
+un mínimo más bajo ya no es este el
+
+punto que tengo que validar ya no es ese
+
+ahora tenemos una altura distinta ahora
+
+pasa a ser ese yo ahora mismo el punto
+
+que tendría que validar es éste tienes
+
+que romper el máximo de origen del
+
+fractal al menos un tercio
+
+ahora haces otro nuevo intento voy a
+
+medir t la nueva altura desde el mismo
+
+punto de origen
+
+ah y ahora tienes 163 pips cojo mi
+
+calculadora 163 entre 3
+
+54 pits tienes que romper por encima del
+
+máximo del fractal no de la falsa rotura
+
+53 pips perfecto yo voy a ver si hay al
+
+roto por encima 53 pips
+
+ahí tenemos
+
+aquí ya hay rotura
+
+ay
+
+ya hay rotura y por tanto puedo decir
+
+que este punto está validado solo me
+
+interesa ese punto más bajo que es lo
+
+que ha sucedido aquí en definitiva
+
+retroceso
+
+con una falsa rotura un retroceso lento
+
+que me deja un punto de control válido y
+
+puedo decir que el retroceso real
+
+de ese retroceso lento es ese punto de
+
+control que ya está validado por tanto
+
+me voy al punto donde me dejaste es el
+
+primer máximo una vez que estés con el
+
+mínimo requerido para considerarte
+
+rotura ahí veo que me deja ese primer
+
+máximo perfecto
+
+tengo mi primer retroceso mi primer
+
+fractal con mi primer punto de control
+
+correcto continuo
+
+tenemos nuevo retroceso voy a pedirte
+
+exactamente lo mismo ahora es ese el
+
+punto que tienes que superar un tercio
+
+de la nueva medida del fractal nuevo que
+
+tenemos 105 pits calculadora
+
+105 pips entre 3
+
+35 perfecto tienes que superar
+
+por encima de ese nivel
+
+por ahí 105 pips para que yo pueda decir
+
+que este nuevo punto está validado el
+
+punto más bajo
+
+este es el nivel que yo tengo que
+
+validar
+
+perfecto tenemos una superación clara y
+
+nos vamos hasta el máximo nuevo que nos
+
+pueda dejar el máximo nuevo que nos
+
+puede dejar ahí lo tenemos
+
+ya tengo dos puntos de control y cuidado
+
+con lo que os voy a decir ahora
+
+cuando se nos está produciendo una
+
+secuencia de fractales en el mismo
+
+sentido en donde nos va dejando puntos
+
+de control esos puntos de control van
+
+teniendo un grado una altura este
+
+retroceso que ha sido validado y que por
+
+tanto nos ha dejado ese punto de control
+
+tiene una altura mientras que por
+
+delante se vayan produciendo retrocesos
+
+de menor altura serán válidos pero si
+
+por delante se produce un retroceso de
+
+mayor altura lo que llamamos de grado
+
+mayor este retroceso y ese punto de
+
+control desaparece ese punto de control
+
+ya no sirve nunca más es decir
+
+sí ahora mismo el precio me hace un
+
+retroceso más pequeño que el anterior de
+
+menor altura y ese retroceso se validará
+
+ambos son correctos
+
+ambos son correctos serían sitios
+
+correctos para que nosotros buscáramos
+
+posibilidades de ciclo
+
+pero ojo si en algún momento por delante
+
+se produce un retroceso mayor bien sea
+
+mayor que esté o bien sea mayor que esté
+
+o bien sea de ambos
+
+ambos desaparecerían es decir si el
+
+precio en algún momento hace un
+
+retroceso de grado mayor que cualquiera
+
+de los dos anteriores
+
+si ese punto se valida no antes
+
+si ese punto supera un tercio por encima
+
+de ese nivel los dos puntos de control
+
+anteriores se habrán quedado obsoletos
+
+movimientos menores dan lugar a
+
+movimientos mayores si esto ocurre
+
+ese punto queda completamente validado
+
+por tanto obsoleto obsoleto y el
+
+movimiento real que tendríamos en el
+
+gráfico sería gran impulso
+
+gran retroceso
+
+gran impulso evolución constante de la
+
+fractalidad retrocesos mayores de grado
+
+mayor anulan retrocesos de grado menor
+
+fijaros aquí mirar la altura de este
+
+retroceso mirar la altura de este
+
+retroceso cada vez que validó uno debo
+
+de preguntarme este nuevo punto de
+
+control ese retroceso que acaba de estar
+
+validado tiene algún retroceso de grado
+
+menor por detrás la respuesta es no
+
+este retroceso sigue siendo mayor que el
+
+que acabo de marcar por tanto ambos son
+
+correctos perfecto y me voy a un
+
+siguiente máximo aquí está
+
+el precio empieza a retroceder ahí me
+
+dejas un nuevo máximo bien yo voy a
+
+
+
+tienes que romper por encima de ese
+
+nivel al menos un tercio del retroceso
+
+no rompes
+
+haces un mínimo más bajo la altura va
+
+cambiando tienes que romper
+
+un tercio por encima del máximo del
+
+nuevo fractal
+
+medimos
+
+fijaros tenemos 120 pips tienes que
+
+superar 40 pips por encima vamos a ver
+
+si aquí lo consigues
+
+46 por tanto lo que me estás diciendo es
+
+que punto validado porque ahí tenemos
+
+una rotura puedo decir que este punto
+
+está validado
+
+me paro hay algún retroceso por detrás
+
+que sea de grado menor vamos a verlo
+
+este retroceso dijimos que tenía
+
+120 pips vamos a ver cuánto tiene la
+
+anterior parece que menos
+
+115 por tanto ese punto de control está
+
+claro que el de atrás no pero ese punto
+
+de control es menor a su siguiente
+
+fractal correcto
+
+por tanto ese retroceso se queda muerto
+
+ese punto de control se queda muerto y
+
+lo que realmente está sucediendo hasta
+
+este momento en el gráfico es pulso
+
+retroceso impulso y retroceso
+
+perfecto
+
+volvemos
+
+a hacerlo de nuevo ahora nos vamos al
+
+máximo del nuevo fractal ahora el precio
+
+tiene que romper por ahí encima ya que
+
+es el primer sitio donde nos ha dejado
+
+máximo después de la ruptura
+
+tienes que superar por encima de ese
+
+nivel la altura del retroceso que vayas
+
+dejando
+
+el precio cae
+
+mirad observo que el retroceso que estoy
+
+viendo ya es mayor que el anterior
+
+supera su nivel quiere decir esto que es
+
+el primer aviso de que como el precio
+
+supere ese nivel
+
+ese primero ese último punto de control
+
+que tengo seguro se va a quedar obsoleto
+
+el precio cae va ampliando su altura va
+
+ampliando su altura ahí parece que
+
+quiere romper medimos
+
+fijaros
+
+tenemos 330 pips vamos a darle 110
+
+tienes que romper 110 pips
+
+ahí me das los 110 pips y por tanto
+
+dejas el primer máximo después de la
+
+rotura me dices que tú estás validado
+
+nos vamos ahí
+
+punto de control validado observó por
+
+detrás tiene algún retroceso de grado
+
+menor si por tanto
+
+obsoleto estos ya no son los movimientos
+
+reales lo fueron en su momento pero aquí
+
+hemos tenido una evolución
+
+de fractalidad gran impulso gran
+
+retroceso gran impulso
+
+movimientos menores dan lugar a
+
+movimientos mayores una y otra vez una y
+
+otra vez puntos de control que se van
+
+quedando obsoletos
+
+tenemos que saber cuando ya no vale un
+
+punto de control y eso implica que ha
+
+habido una evolución a fractalidad mayor
+
+seguimos
+
+el precio empieza a hacer aquí máximo
+
+perfecto ya tengo un nuevo fractal
+
+volvemos a empezar
+
+no rompes sigues haciendo profundidad
+
+sigues haciendo profundidad tienes que
+
+romper por encima de ese nivel un tercio
+
+de tu altura
+
+vivimos
+
+tenemos
+
+145 pips no me complico
+
+145 entre 3 48 pips perfecto mido has
+
+tenido que romper 48 pips ahí los tengo
+
+hayas dejado máximo dos velas cerradas a
+
+derecha por debajo del punto álgido
+
+perfecto punto validado
+
+tenemos algún retroceso menor por detrás
+
+de este que acabo de validar no por
+
+tanto es válido perfecto fijaros
+
+máximo vuelvo a empezar
+
+movimientos menores dan lugar a
+
+movimientos mayores
+
+claramente aquí tenemos una nueva
+
+superación para mí
+
+ay
+
+ahí nos deja un máximo de rotura
+
+por tanto punto validado
+
+hay algún retroceso más pequeño que este
+
+que acabo de validar por detrás no es
+
+correcto punto validado y me voy
+
+al nuevo máximo
+
+ahí está
+
+tenemos nuevo máximo
+
+el precio tiene que romper por encima de
+
+ese nivel falsa rotura
+
+cambiamos el punto de validar cambiamos
+
+estás superando ya el punto de control
+
+anterior si válidas por encima de ese
+
+nivel
+
+a ver
+
+evolución
+
+el precio nos hace un nuevo aquí este
+
+sería el punto más bajo es el único
+
+punto que puedo validar medimos esa
+
+altura desde el máximo del fractal
+
+273 bits
+
+273 entre 3
+
+91 has tenido que superar 91 pips sí sí
+
+pam
+
+fijaros
+
+hasta el siguiente máximo
+
+hay dos velas cerradas a la derecha
+
+desde ese punto álgido hay algún
+
+retroceso anterior de grado menor sí
+
+fuera se ha muerto evolución de la
+
+fractura vamos sacando los movimientos
+
+reales evolucionados del gráfico
+
+ahí vamos a medir cuánto tenía este
+
+unos 270 cuantos tiene el anterior
+
+medimos 300 este es mayor que este por
+
+tanto ya quedan los dos válidos y
+
+seguimos
+
+retroceso
+
+volvemos a empezar tienes que superar
+
+por encima de ese nivel con esa altura
+
+claramente los rompes y vienes aquí a
+
+hacer el primer máximo después de la
+
+rotura punto validado
+
+hay algún mínimo perdón hay algún
+
+retroceso más pequeño que esté por
+
+detrás no es correcto y nos vamos al
+
+siguiente retroceso volvemos a hacer lo
+
+mismo
+
+tienes que superar claramente lo rompes
+
+me voy hasta el siguiente máximo punto
+
+validado hay algún retroceso más pequeño
+
+por detrás medimos
+
+79 pips
+
+72 pips punto roto punto muerto
+
+se acabó
+
+este es el movimiento real siempre tengo
+
+que saber cuáles son los movimientos
+
+reales esto es de párvulos de trading
+
+señores este sería la primera lección
+
+que a cualquier persona que entra en
+
+trading se le debería de dar que supiera
+
+quitar el ruido de movimientos que están
+
+muertos y que esté siempre trabajando
+
+con los puntos de control importantes y
+
+con los fractales importantes
+
+evolucionados del activo que está
+
+trabajando seguimos
+
+aquí me haces máximo perfecto ya tengo
+
+que hacer misma historia
+
+vas generando profundidad profundidad
+
+profundidad
+
+tenemos que ir midiendo
+
+a esa altura
+
+medimos hasta ahí tienes 205 pips no me
+
+complico
+
+205 entre 360 y 8 bits
+
+medimos desde ese máximo has tenido que
+
+romper 68 pips clarísimo nos vamos hasta
+
+el primer máximo después de la rotura
+
+punto validado
+
+ahí hay algún retroceso más pequeño por
+
+detrás si por tanto fuera aquí hay
+
+evolución ese retroceso no vale se lo
+
+han comido
+
+estos son los movimientos reales que
+
+tiene esa subida
+
+todo lo demás es ruido fijaros
+
+jamás deberíamos de nada
+
+ni desde allí ni desde ahí y desde ahí
+
+ruido ruido ruido ruido
+
+ruido
+
+los movimientos reales que hay en esa
+
+subida son esos evolución constante
+
+fractalidad constante movimientos
+
+menores dan lugar a movimientos mayores
+
+movimientos mayores dejan obsoletos a
+
+los movimientos menores puntos de
+
+control
+
+sólo podríamos buscar motivos para
+
+trazar ciclos o desde este o desde este
+
+o desde éste y por supuesto siempre
+
+desde el origen por tanto yo solo podría
+
+estar buscando ciclos o desde ahí o
+
+desde ahí o desde ahí
+
+cualquier ciclo que yo trazará desde un
+
+fractal que está muerto desde un mínimo
+
+de cualquier fractal anterior que ya
+
+está muerto estaría mal cualquier zona
+
+que me diera de trabajo un fib o desde
+
+un punto de inicio incorrecto que no
+
+fuera un punto de control correcto en la
+
+secuencia del movimiento o desde el
+
+origen
+
+no valdría nada todo estaría mal
+
+cualquier zona estaría mal por tanto
+
+tenemos que saber diferenciarlos muy muy
+
+

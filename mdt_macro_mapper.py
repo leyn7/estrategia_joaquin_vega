@@ -42,16 +42,27 @@ def registrar_ciclo(label, name, zona, direction, df, post_idx, peso, tipo_alert
     return status
 
 
+# Cascada de zoom: tras 2 POCs reales en la TF actual se baja a la siguiente, si el tramo
+# restante es abordable (la fractalidad es infinita: un retroceso validado en TF fina
+# invalida puntos de control menores previos, y en velas gruesas es invisible).
+TF_CASCADA = ["2h", "30m", "3m", "1m"]
+TF_MAX_DIAS_RESTANTES = {"30m": None, "3m": 12, "1m": 4}
+
+
 def extraer_pocs_zoom(direction, start_date, extremo_label):
-    """Zoom 2H -> 30m: recolecta POCs con stack monótono desde start_date hasta el extremo.
+    """Zoom en cascada 2H -> 30m -> 3m -> 1m: recolecta POCs con stack monótono desde
+    start_date hasta el extremo.
 
     Devuelve (pocs, df_zoom, extremo_idx). Los RESET 61.8% quedan marcados con
     is_boundary=True (límite de fractalidad) y engullen los niveles menores previos.
+    Desgrane del Ruido (Sección 2): un punto de control validado posteriormente con
+    grado (retroceso) mayor MATA a los anteriores menores; el RESET frena el desgrane.
     """
     dir_bull = direction == "BULLISH"
     get_poc = get_bullish_poc if dir_bull else get_bearish_poc
     key = 'trough' if dir_bull else 'peak'
     key_idx = 'trough_idx' if dir_bull else 'peak_idx'
+    grade_key = 'drop' if dir_bull else 'bounce'
 
     print(f"   >>> HACIENDO ZOOM A 2H PARA EXTRACCIÓN {extremo_label} (Desde: {start_date})")
     df_zoom = get_binance_klines(SYMBOL, "2h", start_time=start_date)
@@ -59,17 +70,22 @@ def extraer_pocs_zoom(direction, start_date, extremo_label):
     search_idx = 0
     pocs = []
     tf = "2h"
+    pocs_desde_swap = 0
 
     while search_idx < extremo_idx:
-        # Hot-swap a 30m a partir del Nivel 4 (2 POCs reales encontrados en 2h)
-        poc_count = sum(1 for p in pocs if not p.get('is_boundary'))
-        if poc_count >= 2 and tf == "2h":
-            switch_time = df_zoom.loc[search_idx, 'open_time']
-            print(f"   >>> HACIENDO ZOOM A 30m PARA EXTRACCIÓN MICRO (A partir del Nivel 4, Desde: {switch_time})")
-            df_zoom = get_binance_klines(SYMBOL, "30m", start_time=switch_time)
-            extremo_idx = df_zoom['high'].idxmax() if dir_bull else df_zoom['low'].idxmin()
-            search_idx = 0
-            tf = "30m"
+        # Hot-swap en cascada a la siguiente TF más fina
+        if pocs_desde_swap >= 2 and tf != TF_CASCADA[-1]:
+            tf_next = TF_CASCADA[TF_CASCADA.index(tf) + 1]
+            max_dias = TF_MAX_DIAS_RESTANTES.get(tf_next)
+            dias_restantes = (df_zoom.loc[extremo_idx, 'open_time'] - df_zoom.loc[search_idx, 'open_time']).days
+            if max_dias is None or dias_restantes <= max_dias:
+                switch_time = df_zoom.loc[search_idx, 'open_time']
+                print(f"   >>> HACIENDO ZOOM A {tf_next.upper()} PARA EXTRACCIÓN MICRO (Desde: {switch_time})")
+                df_zoom = get_binance_klines(SYMBOL, tf_next, start_time=switch_time)
+                extremo_idx = df_zoom['high'].idxmax() if dir_bull else df_zoom['low'].idxmin()
+                search_idx = 0
+                tf = tf_next
+                pocs_desde_swap = 0
 
         poc = get_poc(df_zoom, search_idx, extremo_idx)
         if poc is None: break
@@ -93,8 +109,15 @@ def extraer_pocs_zoom(direction, start_date, extremo_label):
             search_idx = int(poc[key_idx])
             continue
 
+        # DESGRANE DEL RUIDO (Sección 2): "el retroceso mayor se come al menor".
+        # Este POC (posterior) con grado mayor mata a los anteriores menores.
+        while pocs and not pocs[-1].get('is_boundary') and pocs[-1][grade_key] < poc[grade_key]:
+            popped = pocs.pop()
+            print(f"       -> [X] Punto de control en {popped[key]:.2f} (grado {popped[grade_key]:.2f}) MUERE (desgrane: posterior mayor {poc[grade_key]:.2f}).")
+
         pocs.append(poc)
         search_idx = int(poc[key_idx])
+        pocs_desde_swap += 1
 
     return pocs, df_zoom, extremo_idx
 
@@ -239,10 +262,17 @@ def main():
     # RUTA ALCISTA POST-FONDO (REBOTE)
     # =========================================================================
     bottom_date = df_1d.loc[bottom_idx, 'open_time']
-    print(f"\n   >>> HACIENDO ZOOM A 30m PARA EXTRACCIÓN ALCISTA POST-FONDO (Desde: {bottom_date})")
 
-    # We zoom into 30m starting from the 1D bottom date to capture intraday bounces
-    df_post = get_binance_klines(SYMBOL, "30m", start_time=bottom_date)
+    # La extracción post-fondo va en TF FINA: la fractalidad es infinita y un retroceso
+    # validado en 1m invalida puntos de control menores previos (un swing de minutos es
+    # invisible dentro de una vela de 30m). TF según la edad del rebote, medida con los
+    # propios datos (backtest-safe).
+    span_days = (df_1d.iloc[-1]['open_time'] - bottom_date).days
+    tf_pb = "1m" if span_days <= 4 else ("3m" if span_days <= 12 else "30m")
+    tf_pb_label = tf_pb.upper()
+    print(f"\n   >>> HACIENDO ZOOM A {tf_pb_label} PARA EXTRACCIÓN ALCISTA POST-FONDO (Desde: {bottom_date})")
+
+    df_post = get_binance_klines(SYMBOL, tf_pb, start_time=bottom_date)
     bottom_idx_post = df_post['low'].idxmin()
 
     post_bottom_df = df_post.loc[bottom_idx_post:]
@@ -256,20 +286,27 @@ def main():
 
         # Absolute post-bottom cycle
         macro_pb = calc_zones(abs_min_post, abs_max_post, "BULLISH")
-        registrar_ciclo("MACRO ALCISTA POST-FONDO (30M)", "Macro Alcista Post-F", macro_pb, "BULLISH",
+        registrar_ciclo(f"MACRO ALCISTA POST-FONDO ({tf_pb_label})", "Macro Alcista Post-F", macro_pb, "BULLISH",
                         df_post, highest_post_bottom_idx, 96, "COMPRAS", buys, sells, alerts)
 
-        # Recolección de POCs post-fondo: búsqueda hacia atrás desde el techo del rebote,
-        # con stack por tamaño de retroceso ('drop') además de los RESET.
+        # Recolección de POCs post-fondo: búsqueda FORWARD (igual que la ruta principal,
+        # avanzando desde el fondo hacia el techo del rebote). Así el primer POC es el de
+        # retroceso mayor (que implícitamente entierra a los anteriores menores — Desgrane
+        # del Ruido, Sección 2) y los siguientes son las muñecas rusas posteriores menores.
         valid_pocs_post_bull = []
-        current_search_idx_pb = highest_post_bottom_idx
+        current_search_idx_pb = bottom_idx_post
 
-        while current_search_idx_pb > bottom_idx_post:
-            biggest_bull_pb = get_bullish_poc(df_post, bottom_idx_post, current_search_idx_pb)
+        while current_search_idx_pb < highest_post_bottom_idx:
+            biggest_bull_pb = get_bullish_poc(df_post, current_search_idx_pb, highest_post_bottom_idx)
             if biggest_bull_pb is None: break
 
+            # Prevent duplication (mismo trough devuelto de nuevo)
+            if valid_pocs_post_bull and biggest_bull_pb.get('trough') == valid_pocs_post_bull[-1].get('trough'):
+                current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
+                continue
+
             if biggest_bull_pb.get('type') == 'RESET':
-                while valid_pocs_post_bull and valid_pocs_post_bull[-1].get('trough', 999999) > biggest_bull_pb['trough']:
+                while valid_pocs_post_bull and valid_pocs_post_bull[-1].get('trough', 0) > biggest_bull_pb['trough']:
                     popped = valid_pocs_post_bull.pop()
                     print(f"       -> [X] Nivel en {popped['trough']:.2f} invalidado (engullido por el reset).")
                 biggest_bull_pb['is_boundary'] = True
@@ -277,34 +314,26 @@ def main():
                 current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
                 continue
 
+            # DESGRANE DEL RUIDO (Sección 2, red de seguridad): "el retroceso mayor se come
+            # al menor". Si este POC (posterior) validó un grado mayor, mata a los anteriores
+            # menores. Los RESET son límites de fractalidad que el desgrane no cruza.
+            while valid_pocs_post_bull and not valid_pocs_post_bull[-1].get('is_boundary') \
+                    and valid_pocs_post_bull[-1]['drop'] < biggest_bull_pb['drop']:
+                popped = valid_pocs_post_bull.pop()
+                print(f"       -> [X] Punto de control en {popped['trough']:.2f} MUERE (desgrane: retroceso mayor posterior en {biggest_bull_pb['trough']:.2f}).")
+
             valid_pocs_post_bull.append(biggest_bull_pb)
             current_search_idx_pb = int(biggest_bull_pb['trough_idx'])
 
-        # DESGRANE DEL RUIDO (Sección 2): "el retroceso mayor se come al menor".
-        # Recorrido cronológico (más antiguo primero): cada punto de control validado
-        # posteriormente con un grado (retroceso) mayor MATA a los anteriores menores.
-        # Los RESET (boundaries) son límites de fractalidad que el desgrane no cruza.
-        cronologico = list(reversed(valid_pocs_post_bull))
-        sobrevivientes = []
-        for poc in cronologico:
-            if poc.get('is_boundary'):
-                sobrevivientes.append(poc)
-                continue
-            while sobrevivientes and not sobrevivientes[-1].get('is_boundary') and sobrevivientes[-1]['drop'] < poc['drop']:
-                popped = sobrevivientes.pop()
-                print(f"       -> [X] Punto de control en {popped['trough']:.2f} MUERE (desgrane: retroceso mayor posterior en {poc['trough']:.2f}).")
-            sobrevivientes.append(poc)
-        valid_pocs_post_bull = list(reversed(sobrevivientes))
-
         nivel_pb = 1
-        for poc in reversed(valid_pocs_post_bull):
+        for poc in valid_pocs_post_bull:
             if poc.get('is_boundary'):
                 print(f"[FONDO ESTRUCTURAL POST (RESET)] Origen: {poc['trough']:.2f} | Fin: {abs_max_post:.2f}")
                 continue
 
             pb_bull = calc_zones(poc['trough'], abs_max_post, "BULLISH")
             name = f"Sub-C Alcista Post-F Nivel {nivel_pb}"
-            registrar_ciclo(f"{name.upper()} (30M)", name, pb_bull, "BULLISH", df_post,
+            registrar_ciclo(f"{name.upper()} ({tf_pb_label})", name, pb_bull, "BULLISH", df_post,
                             highest_post_bottom_idx, 95 - nivel_pb, "COMPRAS", buys, sells, alerts)
             nivel_pb += 1
 
