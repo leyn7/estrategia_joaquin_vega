@@ -74,3 +74,35 @@ for c in res['ciclos']:
     if c['eval']['estado'] == 'VIVO':
         grado = f"grado {c['grado']:.2f}, " if c['grado'] is not None else ""
         print(f" -> {c['nombre']} ({grado}{c['tf']}) | ciclo {c['ancla']:.2f} -> {c['eval']['fin_vigente']:.2f}")
+
+if res.get('pendientes'):
+    print("\n--- RETROCESOS PENDIENTES DENTRO DEL TRAMO (ruido: sin validar su 1/3) ---")
+    for p in res['pendientes']:
+        print(f" {p['peak']:.2f} -> {p['trough']:.2f} ({cot(p['trough_time'])}, {p['tf']}) | "
+              f"altura {p['altura']:.2f} | valida como punto de control si rompe {p['nivel_validacion']:.2f}")
+
+# Retroceso post-extremo: el movimiento corrido desde el extremo del tramo es el
+# candidato dominante a próximo punto de control (dilata mientras deje nuevos extremos)
+from mdt_data import get_binance_klines
+
+df_post = get_binance_klines("BNBUSDT", res['tf_macro'],
+                             start_time=pd.Timestamp(res['origen_time']).tz_localize('UTC'))
+if cutoff is not None:
+    df_post = df_post[df_post['open_time'] <= cutoff].reset_index(drop=True)
+bull = args.direction == "BULLISH"
+e_idx = int(df_post['high'].idxmax()) if bull else int(df_post['low'].idxmin())
+tramo_post = df_post.loc[e_idx:]
+if len(tramo_post) > 1:
+    if bull:
+        r_idx = int(tramo_post['low'].idxmin())
+        r_val = df_post.loc[r_idx, 'low']
+    else:
+        r_idx = int(tramo_post['high'].idxmax())
+        r_val = df_post.loc[r_idx, 'high']
+    altura = abs(res['extremo'] - r_val)
+    if altura > 0:
+        nivel = res['extremo'] + altura / 3.0 if bull else res['extremo'] - altura / 3.0
+        print(f"\n--- RETROCESO POST-EXTREMO (candidato dominante a punto de control) ---")
+        print(f" {res['extremo']:.2f} -> {r_val:.2f} ({cot(df_post.loc[r_idx, 'open_time'])}) | "
+              f"altura {altura:.2f} | valida si el precio rompe {nivel:.2f} "
+              f"(sigue dilatando mientras deje nuevos extremos)")

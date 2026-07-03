@@ -66,6 +66,7 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True)
     """
     bull = direction == "BULLISH"
     mapa, cronologia = [], []
+    pendientes_por_trough = {}
     inicio_tramo = pd.Timestamp(inicio)
     limite = pd.Timestamp(fin_limite) if fin_limite is not None else (cutoff or _ahora())
     origen_val = origen_time = extremo_val = tf_macro = None
@@ -112,6 +113,18 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True)
                 ev['trough_time'] = df_tf.loc[ev['trough_idx'], 'open_time']
             cronologia.append(ev)
 
+        # Retrocesos pendientes (ruido: sin validar su 1/3) — candidatos a punto de
+        # control. Dedupe entre TFs por el extremo del retroceso; manda la medición
+        # con mayor altura (el impulso real más grande visto).
+        for p in res['pendientes']:
+            p['tf'] = tf
+            p['peak_time'] = df_tf.loc[p['peak_idx'], 'open_time']
+            p['trough_time'] = df_tf.loc[p['trough_idx'], 'open_time']
+            clave = round(p['trough'], 2)
+            previo = pendientes_por_trough.get(clave)
+            if previo is None or p['altura'] > previo['altura']:
+                pendientes_por_trough[clave] = p
+
         for cpv in res['vivos']:
             cp = {'trough': cpv['trough'], 'grado': cpv['grado'], 'peak': cpv['peak'], 'tf': tf,
                   'trough_time': df_tf.loc[cpv['trough_idx'], 'open_time'],
@@ -132,8 +145,13 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True)
             mapa.append(cp)
 
     mapa.sort(key=lambda x: x['trough_time'])
-    return {'cps': mapa, 'cronologia': cronologia, 'origen': origen_val,
-            'origen_time': origen_time, 'extremo': extremo_val, 'tf_macro': tf_macro}
+    # Un pendiente cuyo extremo coincide con un CP ya validado es la misma estructura
+    anclas = {round(c['trough'], 2) for c in mapa}
+    pendientes = sorted((p for k, p in pendientes_por_trough.items() if k not in anclas),
+                        key=lambda p: p['altura'], reverse=True)
+    return {'cps': mapa, 'cronologia': cronologia, 'pendientes': pendientes,
+            'origen': origen_val, 'origen_time': origen_time,
+            'extremo': extremo_val, 'tf_macro': tf_macro}
 
 
 def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=True):
