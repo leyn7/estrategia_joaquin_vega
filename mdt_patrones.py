@@ -42,6 +42,12 @@ def _entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, 
       - SL DILATABLE (Secc 16): "el punto extremo MÁS PROFUNDO que haya dejado el
         precio en la zona antes de iniciar el retroceso" — si la llegada profundiza,
         el fibo se re-ancla en el nuevo extremo y el retroceso se re-mide desde ahí.
+      - P2 CORRECTA obligatoria (video Secc 16: "una nueva pauta número 2 que ahora
+        pueda ser CORRECTA... nos hace ese máximo y damos por bueno"): el extremo de
+        la nueva Pauta 2 debe estar confirmado con 2 velas cerradas a la derecha (y
+        vecinos izquierdos que no lo profundicen) antes de que el toque del 61.8
+        pueda disparar. Sin P2 correcta no hay entrada — mata los gatillos
+        instantáneos de micro-impulso (la escala del patrón acompaña a la del ciclo).
       - Si la llegada escapa de la zona, el contexto muta a Engaño Extremo (Secc 17).
       - Tras el gatillo, un retorno al extremo de la llegada = SL (P3_CORTA_ROTA).
     Replay cronológico: el toque solo cuenta desde el instante del escape activo.
@@ -49,6 +55,7 @@ def _entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, 
     detalles["calidad"] = "ENTRADA PROFUNDA (Pauta 3 Corta)"
     extremo = p1_val
     p2_run = LO[p1_idx]
+    p2_idx = p1_idx
     escape_activo = False
     for i in range(p1_idx + 1, len(df)):
         if HI[i] > extremo:
@@ -56,6 +63,7 @@ def _entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, 
             # (Sin chequeo de gatillo en esta vela: no hay retroceso en curso.)
             extremo = HI[i]
             p2_run = LO[i]
+            p2_idx = i
             if extremo > zmax:
                 # La "llegada" se salió de la zona: territorio del Engaño Extremo
                 if anulacion is not None:
@@ -65,14 +73,19 @@ def _entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, 
                         "mensaje": "La llegada profunda escapó de la zona.",
                         "detalles": detalles, "idx_muerte": i}
             continue
-        if LO[i] < p2_run:
+        if LO[i] <= p2_run:
+            # <= : el último toque del extremo manda (la confirmación cuenta desde ahí)
             p2_run = LO[i]
+            p2_idx = i
         imp = extremo - p2_run
         if imp <= 0:
             continue
         if not escape_activo and p2_run + (imp * ENGANO_1618) >= zmax:
             escape_activo = True
-        if escape_activo:
+        # P2 correcta: 2 velas cerradas a la derecha del extremo, izquierda sin profundizarlo
+        p2_correcta = (i - p2_idx >= 2 and p2_idx >= 2
+                       and LO[p2_idx - 1] >= p2_run and LO[p2_idx - 2] >= p2_run)
+        if escape_activo and p2_correcta:
             n618 = p2_run + (imp * NIVEL_618)
             if HI[i] >= n618:
                 n809 = p2_run + (imp * NIVEL_809)

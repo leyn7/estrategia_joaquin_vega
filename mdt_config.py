@@ -16,13 +16,16 @@ ORIGEN_MACRO_BANDA = (182.0, 183.5)
 
 # --- Cascada de temporalidades del mapa (Regla 1: siempre termina en 1m) ---
 TF_LADDER = ["1d", "2h", "30m", "3m", "1m"]
-TF_MINUTOS = {"1d": 1440, "2h": 120, "30m": 30, "3m": 3, "1m": 1}
+TF_MINUTOS = {"1d": 1440, "4h": 240, "2h": 120, "1h": 60, "30m": 30, "15m": 15, "3m": 3, "1m": 1}
 MIN_VELAS_TF = 40            # una TF con menos velas que esto no aporta estructura
 MAX_VELAS_DESCARGA = 15000   # presupuesto de velas por descarga (1m -> ~10 días de cola)
 
-# --- TF del patrón (Secc 10): "bajar una temporalidad por debajo del tamaño
-# del ciclo que se está trabajando". La TF del ciclo es donde se halló su ancla.
-TF_PATRON = {"1d": "2h", "2h": "30m", "30m": "3m", "3m": "1m", "1m": "1m"}
+# --- TF del patrón (Secc 10): "bajar UNA temporalidad por debajo del tamaño
+# del ciclo que se está trabajando" (ej. de la biblia: ciclo H1 -> patrón M30 —
+# UN escalón real, no un salto de 12x). La TF del ciclo es donde se halló su
+# ancla. Regla del usuario (4 jul): la escala del patrón y la del ciclo van
+# juntas — el stop de una oportunidad macro es de tamaño macro.
+TF_PATRON = {"1d": "4h", "2h": "1h", "30m": "15m", "3m": "1m", "1m": "1m"}
 
 # --- Capa operativa (regla usuario 3 jul 2026) ---
 # Ciclo OPERABLE = grado >= 1% del precio actual (el macro siempre es operable).
