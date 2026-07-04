@@ -54,7 +54,8 @@ print("\n--- CICLOS Y SU SEGUIMIENTO CRONOLÓGICO HASTA EL CUTOFF ---")
 for c in res['ciclos']:
     ev = c['eval']
     grado = f"grado {c['grado']:.2f}" if c['grado'] is not None else "macro"
-    etiqueta = f"{c['nombre']} ({c['tf']}, {grado}) ancla {c['ancla']:.2f}"
+    subop = "" if c.get('operable', True) else " [SUB-OPERABLE <1% precio]"
+    etiqueta = f"{c['nombre']} ({c['tf']}, {grado}) ancla {c['ancla']:.2f}{subop}"
     if ev['estado'] == 'MUERTO':
         print(f" [MUERTO] {etiqueta}: tocó su 138.2 ({ev['nivel_muerte']:.2f}) el {cot(ev['hora_muerte'])}")
     elif ev['estado'] == 'SIN_IMPULSO':
@@ -77,17 +78,26 @@ for c in res['ciclos']:
         extra = f" | EVOLUCIONADO: re-anclado en {ev['origen_vigente']:.2f}" if ev['evolucionado'] else ""
         print(f" [VIVO]   {etiqueta} -> fin {ev['fin_vigente']:.2f}: {estado}{extra}")
 
-print("\n--- MAPA ACTUAL DEL TRAMO (anclas vivas) ---")
+print("\n--- MAPA ACTUAL DEL TRAMO (anclas vivas OPERABLES) ---")
 for c in res['ciclos']:
-    if c['eval']['estado'] == 'VIVO':
+    if c['eval']['estado'] == 'VIVO' and c.get('operable', True):
         grado = f"grado {c['grado']:.2f}, " if c['grado'] is not None else ""
         print(f" -> {c['nombre']} ({grado}{c['tf']}) | ciclo {c['ancla']:.2f} -> {c['eval']['fin_vigente']:.2f}")
+subops = [c for c in res['ciclos'] if c['eval']['estado'] == 'VIVO' and not c.get('operable', True)]
+if subops:
+    print(f" (+{len(subops)} miniciclos vivos sub-operables en el motor: "
+          + ", ".join(f"{c['ancla']:.2f}" for c in subops) + ")")
 
 if res.get('pendientes'):
+    umbral = (res.get('precio_ref') or 0) * 0.01
+    grandes = [p for p in res['pendientes'] if p['altura'] >= umbral]
+    micro = len(res['pendientes']) - len(grandes)
     print("\n--- RETROCESOS PENDIENTES DENTRO DEL TRAMO (ruido: sin validar su 1/3) ---")
-    for p in res['pendientes']:
+    for p in grandes:
         print(f" {p['peak']:.2f} -> {p['trough']:.2f} ({cot(p['trough_time'])}, {p['tf']}) | "
               f"altura {p['altura']:.2f} | valida como punto de control si rompe {p['nivel_validacion']:.2f}")
+    if micro:
+        print(f" (+{micro} micro-pendientes <1% del precio, omitidos)")
 
 # Retroceso post-extremo: el movimiento corrido desde el extremo del tramo es el
 # candidato dominante a próximo punto de control (dilata mientras deje nuevos extremos)

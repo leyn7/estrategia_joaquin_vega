@@ -29,6 +29,12 @@ TF_MINUTOS = {"1d": 1440, "2h": 120, "30m": 30, "3m": 3, "1m": 1}
 MIN_VELAS_TF = 40          # una TF con menos velas que esto no aporta estructura
 MAX_VELAS_DESCARGA = 15000  # presupuesto de velas por descarga (1m -> ~10 días de cola)
 
+# Capa operativa (regla usuario 3 jul 2026): los miniciclos no valen la pena operarse.
+# Un ciclo es OPERABLE si su grado (retroceso del ancla) >= 1% del precio actual.
+# Los sub-operables siguen vivos en el motor (desgrane, pendientes, precisión del
+# mapa) pero no generan zonas operativas ni deben alimentar al escáner de patrones.
+GRADO_MIN_OPERABLE_PCT = 0.01
+
 
 def _ahora():
     return pd.Timestamp.now(tz='UTC').tz_localize(None)
@@ -178,14 +184,25 @@ def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=T
         if span_min / TF_MINUTOS[tf_eval] > MAX_VELAS_DESCARGA:
             tf_eval = _tf_para_span(span_min)
         por_tf.setdefault(tf_eval, []).append(c)
+    precio_ref = None
+    t_ref = None
     for tf_eval, lista in por_tf.items():
         desde = min(c['ancla_time'] for c in lista)
         df_eval = _descargar(tf_eval, desde, cutoff)
+        if len(df_eval) and (t_ref is None or df_eval['open_time'].iloc[-1] > t_ref):
+            t_ref = df_eval['open_time'].iloc[-1]
+            precio_ref = float(df_eval['close'].iloc[-1])
         for c in lista:
             idx0 = int(df_eval['open_time'].searchsorted(c['ancla_time']))
             c['eval'] = evaluar_ciclo(c['ancla'], df_eval, idx0, direction)
 
+    # Capa operativa: grado mínimo del 1% del precio (el macro siempre es operable)
+    for c in ciclos:
+        c['operable'] = c['es_macro'] or (precio_ref is not None and
+                                          c['grado'] >= precio_ref * GRADO_MIN_OPERABLE_PCT)
+
     ext['ciclos'] = ciclos
+    ext['precio_ref'] = precio_ref
     return ext
 
 
@@ -198,6 +215,12 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
     ev = c['eval']
     nombre = c['nombre']
     etiqueta = f"[{nombre.upper()} ({c['tf'].upper()})] ancla {c['ancla']:.2f}"
+
+    if not c.get('operable', True) and ev['estado'] != 'MUERTO':
+        if verbose:
+            print(f"{etiqueta} -> SUB-OPERABLE (grado {c['grado']:.2f} < 1% del precio): "
+                  f"vive en el motor, sin zonas operativas")
+        return
 
     if ev['estado'] == 'MUERTO':
         if verbose:
