@@ -3,6 +3,14 @@ import requests
 import time
 
 REQUEST_TIMEOUT = 15  # segundos: el bot nunca debe quedarse colgado esperando a Binance
+TZ_LOCAL = 'America/Bogota'  # zona horaria del operador (COT)
+
+
+def to_cot(serie_o_ts):
+    """Convierte open_time naive-UTC (como lo devuelve get_binance_klines) a hora Bogotá."""
+    if hasattr(serie_o_ts, 'dt'):
+        return serie_o_ts.dt.tz_localize('UTC').dt.tz_convert(TZ_LOCAL)
+    return pd.Timestamp(serie_o_ts).tz_localize('UTC').tz_convert(TZ_LOCAL)
 
 def _fetch_klines(url, params):
     """GET con timeout y validación: Binance devuelve un dict (no lista) en errores/rate-limit."""

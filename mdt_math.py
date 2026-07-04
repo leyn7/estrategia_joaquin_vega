@@ -134,55 +134,6 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
     return res
 
 
-def get_active_zones(zone_data, direction, df, post_fin_idx):
-    if post_fin_idx >= len(df): 
-        return {"ALTA": False, "MEDIA": False, "BAJA": False, "CYCLE_DEAD": False}
-        
-    df_post = df.loc[post_fin_idx:]
-    status = {"ALTA": False, "MEDIA": False, "BAJA": False, "CYCLE_DEAD": False}
-    
-    if direction == "BULLISH":
-        min_post = df_post['low'].min()
-        if min_post <= zone_data['activacion']: # Tocó el 38.2%
-            status["ALTA"] = True
-            status["MEDIA"] = True
-            status["BAJA"] = True
-            
-            # Muerte por tocar Parte Baja (100% / Origen)
-            if min_post <= zone_data['origen']:
-                status["MEDIA"] = False
-                status["ALTA"] = False
-                
-            # Muerte del Ciclo Completo (Tocó el -38.2% / Extensión Extrema)
-            extrema_muerte = zone_data['origen'] - (zone_data['impulse'] * 0.382)
-            if min_post <= extrema_muerte:
-                status["CYCLE_DEAD"] = True
-                status["ALTA"] = False
-                status["MEDIA"] = False
-                status["BAJA"] = False
-                
-    else: # BEARISH
-        max_post = df_post['high'].max()
-        if max_post >= zone_data['activacion']: # Tocó el 38.2%
-            status["ALTA"] = True
-            status["MEDIA"] = True
-            status["BAJA"] = True
-            
-            # Muerte por tocar Parte Alta (100% / Origen)
-            if max_post >= zone_data['origen']:
-                status["MEDIA"] = False
-                status["BAJA"] = False
-                
-            # Muerte del Ciclo Completo (Tocó el 138.2% / Extensión Extrema)
-            extrema_muerte = zone_data['origen'] + (zone_data['impulse'] * 0.382)
-            if max_post >= extrema_muerte:
-                status["CYCLE_DEAD"] = True
-                status["ALTA"] = False
-                status["MEDIA"] = False
-                status["BAJA"] = False
-                
-    return status
-
 def apply_concurrency(z_mayor, z_menor, buy_or_sell):
     if buy_or_sell == "BUY": # Ataca desde arriba
         imay, fmay = max(z_mayor), min(z_mayor)

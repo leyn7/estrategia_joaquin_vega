@@ -1,22 +1,5 @@
 from mdt_data import get_binance_klines
-
-def find_micro_fractals(df):
-    peaks = []
-    troughs = []
-    for i in range(2, len(df) - 2):
-        is_peak = (df.loc[i, 'high'] > df.loc[i-1, 'high'] and 
-                   df.loc[i, 'high'] > df.loc[i-2, 'high'] and 
-                   df.loc[i, 'high'] > df.loc[i+1, 'high'] and 
-                   df.loc[i, 'high'] > df.loc[i+2, 'high'])
-                   
-        is_trough = (df.loc[i, 'low'] < df.loc[i-1, 'low'] and 
-                     df.loc[i, 'low'] < df.loc[i-2, 'low'] and 
-                     df.loc[i, 'low'] < df.loc[i+1, 'low'] and 
-                     df.loc[i, 'low'] < df.loc[i+2, 'low'])
-                     
-        if is_peak: peaks.append(i)
-        if is_trough: troughs.append(i)
-    return peaks, troughs
+from mdt_fractal import find_micro_fractals
 
 def _entrada_profunda(df, p1_idx, p1_val, zona_max, zona_min, direction, detalles):
     """Patrón de Entrada Profunda (Sección 16). Contexto ya validado: llegada profunda
