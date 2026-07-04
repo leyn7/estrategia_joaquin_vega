@@ -9,7 +9,7 @@ vivo debe re-validar con ancla_viva(mapa_fresco, ancla) antes de armar o
 disparar cualquier entrada (candado mapa->escáner).
 """
 import pandas as pd
-from mdt_config import TF_PATRON, TF_MINUTOS, RATIO_MINIMO
+from mdt_config import TF_PATRON, TF_MINUTOS, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
 from mdt_macro_mapper import generar_mapa, _descargar, _ahora, ancla_viva
 
@@ -23,16 +23,19 @@ ESTADOS_OPERABLES = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO
 
 
 def direccion_prioritaria(mapa):
-    """Secc 1/7.1: el Primer Ciclo (el mayor vigente cuya zona contiene al precio)
-    dicta la dirección del Movimiento Prioritario. Si el precio trabaja una zona de
-    compras del ciclo que manda, las compras son prioritarias; toda venta es un
-    Movimiento Secundario y debe operarse con menor volumen/riesgo (y viceversa)."""
+    """Regla del usuario (4 jul): "el que manda es el ciclo cuya zona se está
+    trabajando ACTIVAMENTE" — la zona MÁS ESPECÍFICA (la más angosta) que contiene
+    al precio, no la más grande que lo envuelva. Si el precio trabaja una zona de
+    ventas, las ventas son el Movimiento Prioritario; operar en contra es un
+    Movimiento Secundario con menor volumen/riesgo (Secc 1/7.1)."""
     precio = mapa['precio']
     candidatos = [("SELL", z) for z in mapa['sells']] + [("BUY", z) for z in mapa['buys']]
-    for lado, z in sorted(candidatos, key=lambda t: -t[1]['peso']):
-        if z.get('z') and min(z['z']) <= precio <= max(z['z']):
-            return lado, z['name']
-    return None, None
+    contienen = [(lado, z) for lado, z in candidatos
+                 if z.get('z') and min(z['z']) <= precio <= max(z['z'])]
+    if not contienen:
+        return None, None
+    lado, z = min(contienen, key=lambda t: max(t[1]['z']) - min(t[1]['z']))
+    return lado, z['name']
 
 
 def _operacion(escaneo, prioritaria):
@@ -105,15 +108,20 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
             zmax, zmin = max(zona['z']), min(zona['z'])
             res = detect_patron_institucional(df_z, zmax, zmin, lado,
                                               nivel_anulacion=zona.get('nivel_anulacion'))
+            # Preferencia del usuario: las zonas macro (más anchas que el % del
+            # precio) son CONTEXTO — no se operan; sus oportunidades llegan por
+            # los sub-ciclos pequeños de adentro.
+            es_contexto = (zmax - zmin) > mapa['precio'] * ZONA_MAX_OPERABLE_PCT
             escaneos.append({'zona': zona['name'], 'rango': (zmax, zmin), 'lado': lado,
                              'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
                              'ancla': zona.get('ancla'), 'tp_zona': zona.get('tp_zona'),
+                             'contexto': es_contexto,
                              'operativa_desde': desde_op, 'resultado': res})
 
-    # Las 4 Informaciones (Secc 7) para cada señal accionable
+    # Las 4 Informaciones (Secc 7) para cada señal accionable (no-contexto)
     prioritaria, zona_que_manda = direccion_prioritaria(mapa)
     for e in escaneos:
-        if e['resultado']['estado'] in ESTADOS_OPERABLES:
+        if e['resultado']['estado'] in ESTADOS_OPERABLES and not e['contexto']:
             e['operacion'] = _operacion(e, prioritaria)
 
     if verbose:
@@ -123,9 +131,10 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
         print("\n--- ESCÁNER DE PATRONES SOBRE EL MAPA (TF del patrón = 1 por debajo del ciclo) ---")
         for e in escaneos:
             res = e['resultado']
-            marca = " <<<" if res['estado'] in ESTADOS_OPERABLES else ""
+            marca = " <<<" if res['estado'] in ESTADOS_OPERABLES and not e['contexto'] else ""
+            ctx = " [ZONA MACRO: contexto, no se opera]" if e['contexto'] else ""
             print(f"[{e['lado']}] {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f} "
-                  f"(ciclo {e['tf_ciclo']} -> patrón {e['tf_patron']}, ancla {e['ancla']:.2f})")
+                  f"(ciclo {e['tf_ciclo']} -> patrón {e['tf_patron']}, ancla {e['ancla']:.2f}){ctx}")
             hora = res.get('detalles', {}).get('hora_gatillo')
             hora_txt = f" [gatillo: {hora}]" if hora is not None else ""
             print(f"      {res['estado']}: {res['mensaje']}{hora_txt}{marca}")

@@ -174,6 +174,8 @@ def main():
             tp_zona = e.get('tp_zona')
             if tp_zona is None:
                 continue
+            if e.get('contexto'):
+                continue  # zona macro: contexto, no se opera (preferencia usuario)
             lado = e['lado']
             tp_nivel = max(tp_zona) if lado == "SELL" else min(tp_zona)
             for t in _entradas_de(res, e):

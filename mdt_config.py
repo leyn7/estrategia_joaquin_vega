@@ -36,6 +36,14 @@ GRADO_MIN_OPERABLE_PCT = 0.01
 RATIO_MINIMO = 4.0   # Ratio Riesgo/Beneficio mínimo estricto 1:4
 MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bucle en vivo)
 
+# --- Preferencia operativa (usuario, 4 jul 2026) ---
+# "Yo no trabajaría una zona macro, tardaría mucho en darme profit; prefiero
+# trabajar las zonas pequeñas que me den oportunidades de entrada y sean
+# rentables. Las zonas macro siempre van a tener oportunidades en sus zonas
+# pequeñas." Las zonas más anchas que este % del precio son CONTEXTO (dirección,
+# mapa) — no se operan; sus oportunidades llegan por los sub-ciclos de adentro.
+ZONA_MAX_OPERABLE_PCT = 0.05
+
 # --- Números de la biblia (NO tocar: son la estrategia) ---
 ZONA_191 = 0.191     # tamaño de cada zona de trabajo (Secc 4)
 NIVEL_382 = 0.382    # activación del ciclo / extensiones de muerte ±38.2 (Secc 3 y 6)
