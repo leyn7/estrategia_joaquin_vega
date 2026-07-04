@@ -226,13 +226,17 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
             # (Parte Alta en bajista, Parte Baja en alcista). Zona operativa en
             # trabajo; las zonas internas del ciclo se borran.
             peso = c['peso']
+            # La zona del origen es operativa desde que abrió la excursión (Secc 8):
+            # el escáner solo debe mirar velas de este episodio de trabajo.
+            extra = {"tf": c['tf'], "ancla": c['ancla'],
+                     "operativa_desde": ev.get('hora_excursion')}
             if direction == "BULLISH":
                 caja = z['BAJA']
-                buys.append({"name": f"{nombre} (Baja)", "z": caja, "peso": peso})
+                buys.append({"name": f"{nombre} (Baja)", "z": caja, "peso": peso, **extra})
                 lado = "PARTE BAJA (Compras)"
             else:
                 caja = z['ALTA']
-                sells.append({"name": f"{nombre} (Alta)", "z": caja, "peso": peso})
+                sells.append({"name": f"{nombre} (Alta)", "z": caja, "peso": peso, **extra})
                 lado = "PARTE ALTA (Ventas)"
             if verbose:
                 print(f"{etiqueta} -> {detalle} | TRABAJANDO {lado}: {min(caja):.2f} a {max(caja):.2f} "
@@ -255,19 +259,24 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
         media_txt = " | media MUERTA (tocó el 100%)" if ev['media_muerta'] else ""
         print(f"{etiqueta} -> {detalle} | ACTIVADO ({ev['hora_activacion']}){media_txt}")
     peso = c['peso']
+    # Las zonas existen desde la ACTIVACIÓN del ciclo (tocó su 38.2, Secc 3): el
+    # escáner de patrones solo debe mirar velas desde entonces (Secc 13, checklist 1:
+    # "el precio está operando dentro de una Zona de Decisión ACTIVA").
+    extra = {"tf": c['tf'], "ancla": c['ancla'],
+             "operativa_desde": ev.get('hora_activacion')}
     if direction == "BULLISH":
-        buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso})
+        buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso, **extra})
         if not ev['media_muerta']:
-            buys.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso})
-        sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso})
+            buys.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso, **extra})
+        sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso, **extra})
     else:
-        buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso})
-        sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso})
+        buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso, **extra})
+        sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso, **extra})
         if not ev['media_muerta']:
-            sells.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso})
+            sells.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso, **extra})
 
 
-def resolver_concurrencia(zonas, buy_or_sell, current_price=None):
+def resolver_concurrencia(zonas, buy_or_sell, current_price=None, verbose=True):
     """Aplica la concurrencia global (la zona de mayor peso manda) y devuelve las supervivientes.
 
     Excepción de la Zona en Trabajo (fractalidad infinita, Sección 3 Caso 2): la zona mayor
@@ -291,7 +300,7 @@ def resolver_concurrencia(zonas, buy_or_sell, current_price=None):
                 continue  # la mayor está en trabajo (precio dentro): no tritura sub-ciclos
             if otro['peso'] > current['peso']:
                 new_z, razon = apply_concurrency(otro['z'], current['z'], buy_or_sell)
-                if new_z != current['z']:
+                if verbose and new_z != current['z']:
                     print(f"[{current['name']} vs {otro['name']}] -> {razon}")
                 current['z'] = new_z
                 if current['z'] is None:
@@ -351,10 +360,10 @@ def generar_mapa(cutoff=None, verbose=True):
     if verbose:
         print("\n--- CONCURRENCIA GLOBAL DE ZONAS ACTIVAS ---")
         print("\n[ZONAS DE COMPRAS]")
-    final_buys = resolver_concurrencia(buys, "BUY", current_price)
+    final_buys = resolver_concurrencia(buys, "BUY", current_price, verbose)
     if verbose:
         print("\n[ZONAS DE VENTAS]")
-    final_sells = resolver_concurrencia(sells, "SELL", current_price)
+    final_sells = resolver_concurrencia(sells, "SELL", current_price, verbose)
 
     if verbose:
         print("\n--- ZONAS OPERATIVAS FINALES ---")

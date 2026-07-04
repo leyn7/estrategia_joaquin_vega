@@ -50,6 +50,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
     origen_v = m * origen
     fin_v = float('-inf')
     exc_min = None
+    hora_exc = None
     activado = False
     hora_act = None
     evolucionado = False
@@ -81,6 +82,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
                 if hi >= act_evo:
                     origen_v = exc_min
                     exc_min = None
+                    hora_exc = None
                     evolucionado = True
                     activado = True
                     hora_act = times[i]
@@ -89,6 +91,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
 
             if lo < origen_v:
                 exc_min = lo
+                hora_exc = times[i]  # apertura de la excursión: la zona del origen entra en trabajo
                 media_muerta = True  # tocó el 100% al salir (la evolución la restaura)
                 continue
 
@@ -129,6 +132,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
         res['limite_zona_origen'] = m * limite_zona
         res['nivel_muerte'] = m * (origen_v - impulso * 0.382)
         res['extremo_excursion'] = m * exc_min
+        res['hora_excursion'] = hora_exc
         # Fibo de alerta de la evolución (Secc 8): medida mayor extremo -> fin
         res['evolucion_38_2'] = m * (exc_min + (fin_v - exc_min) * 0.382)
     return res

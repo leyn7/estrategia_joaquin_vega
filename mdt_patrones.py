@@ -12,7 +12,6 @@ Convenciones canónicas (siempre semántica SELL):
   zmax/zmin = techo/piso canónicos de la zona (en BUY se invierten y niegan)
   r(v) = valor real de un precio canónico (v en SELL, -v en BUY)
 """
-from mdt_data import get_binance_klines
 from mdt_fractal import find_micro_fractals
 from mdt_config import NIVEL_618, NIVEL_809, ENGANO_1382, ENGANO_1618
 
@@ -443,51 +442,5 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
 
     return ultimo_resultado
 
-if __name__ == "__main__":
-    from mdt_config import SYMBOL
-    from mdt_data import to_cot
-    print(f"Descargando velas M3 de {SYMBOL} para prueba (Últimas 10 horas)...")
-    df_m3 = get_binance_klines(SYMBOL, "3m").tail(200).reset_index(drop=True)
-    df_m3['open_time'] = to_cot(df_m3['open_time'])
-
-    zona_max = 573.74
-    zona_min = 565.14
-
-    print("--- FRACTALES DETECTADOS (ÚLTIMAS VELAS) ---")
-    peaks, troughs = find_micro_fractals(df_m3)
-    print("Picos (Candidatos a P1):")
-    for p in peaks[-5:]:
-        print(f"  [{p}] {df_m3.loc[p, 'open_time']} -> {df_m3.loc[p, 'high']:.2f}")
-    print("\nValles (Candidatos a P2):")
-    for t in troughs[-5:]:
-        print(f"  [{t}] {df_m3.loc[t, 'open_time']} -> {df_m3.loc[t, 'low']:.2f}")
-    print("------------------------------------------\n")
-
-    print(f"Buscando Patrones en Zona REAL DE VENTAS (Nivel 5 Media): {zona_max:.2f} a {zona_min:.2f}...\n")
-    resultado = detect_patron_institucional(df_m3, zona_max, zona_min, "SELL")
-
-    print("RESULTADO DEL ESCÁNER:")
-    print(f"Estado: {resultado['estado']}")
-    print(f"Mensaje: {resultado['mensaje']}")
-
-    if 'detalles' in resultado:
-        d = resultado['detalles']
-        print(f"\n--- DETALLES DEL {d.get('nivel_engano', 'PATRÓN')} ---")
-        print(f" PAUTA 1 (Llegada/Stop Anterior): Pico en {d.get('pauta1_price', 0):.2f} (Vela de las {d.get('pauta1_time', '')})")
-        print(f" PAUTA 2 (Rechazo Actual): Valle en {d.get('pauta2_price', 0):.2f} (Vela de las {d.get('pauta2_time', '')})")
-        print(f" Impulso (P1 - P2): {d.get('impulso', 0):.2f} USDT")
-        print(f" Zona de Engaños (138.2% a 161.8%): {d.get('fibo_1382', 0):.2f} a {d.get('fibo_1618', 0):.2f}")
-        print(f" Mitad de la zona operativa: {d.get('mitad_zona', 0):.2f} | Proporcional: {'SÍ' if d.get('proporcional') else 'NO'}")
-        print(f" Calidad: {d.get('calidad', 'N/A')}")
-        print(f" Volumen Recomendado: {d.get('sugerencia_volumen', 'N/A')}")
-
-    if "GATILLO" in resultado['estado'] or "ENTRADA_PROFUNDA" in resultado['estado']:
-        d = resultado['detalles']
-        print("\n--- ZONAS DE OPERACIÓN ---")
-        if 'gatillo_agresivo' in d: print(f" 🔥 GATILLO AGRESIVO (Market): {d['gatillo_agresivo']:.2f}")
-        if 'entrada_p3_corta' in d: print(f" 🎯 ENTRADA P3 CORTA (toque 61.8): {d['entrada_p3_corta']:.2f} (zona hasta {d['limite_gestion_809']:.2f})")
-        if 'entrada_dt_618' in d: print(f" 🎯 ENTRADA DOBLE TECHO/SUELO (toque 61.8): {d['entrada_dt_618']:.2f} (zona hasta {d['limite_gestion_809']:.2f})")
-        if 'hora_gatillo' in d: print(f" ⏱️ HORA DEL GATILLO: {d['hora_gatillo']}")
-        print(f" 🛑 STOP LOSS ESTRUCTURAL: {d['stop_loss']:.2f}")
-        if 'espera_calmada' in d: print(f" 🧘 ENTRADA CALMADA (Límite): {d['espera_calmada']:.2f}")
-        if 'fibo_seguimiento_618' in d: print(f" 🛡️ NIVEL DE PROTECCIÓN (50% OUT): {d['fibo_seguimiento_618']:.2f}")
+# El escaneo de zonas reales vive en mdt_escaner.py (integración mapa->escáner);
+# para pruebas manuales con zona/TF arbitrarias está _backtest_patron.py.

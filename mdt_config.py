@@ -20,6 +20,10 @@ TF_MINUTOS = {"1d": 1440, "2h": 120, "30m": 30, "3m": 3, "1m": 1}
 MIN_VELAS_TF = 40            # una TF con menos velas que esto no aporta estructura
 MAX_VELAS_DESCARGA = 15000   # presupuesto de velas por descarga (1m -> ~10 días de cola)
 
+# --- TF del patrón (Secc 10): "bajar una temporalidad por debajo del tamaño
+# del ciclo que se está trabajando". La TF del ciclo es donde se halló su ancla.
+TF_PATRON = {"1d": "2h", "2h": "30m", "30m": "3m", "3m": "1m", "1m": "1m"}
+
 # --- Capa operativa (regla usuario 3 jul 2026) ---
 # Ciclo OPERABLE = grado >= 1% del precio actual (el macro siempre es operable).
 # Los sub-operables viven en el motor (desgrane/pendientes) sin zonas operativas.
