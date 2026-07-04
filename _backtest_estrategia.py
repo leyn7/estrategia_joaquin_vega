@@ -27,7 +27,11 @@ import mdt_data
 from mdt_config import SYMBOL, TF_MINUTOS, RATIO_MINIMO
 
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_cache_klines")
-HORIZONTE_DIAS = 7  # máximo de días para que una operación resuelva
+# Horizonte de simulación POR TAMAÑO DEL CICLO (regla usuario 4 jul): cada operación
+# vive en el tamaño del ciclo donde nació su patrón — el TP es del mismo ciclo, y el
+# tiempo para alcanzarlo escala con ese tamaño. Una operación macro (1d) no se juzga
+# en 7 días.
+HORIZONTE_POR_TF_CICLO = {"1d": 60, "2h": 14, "30m": 7, "3m": 3, "1m": 2}  # días
 
 # ---------------------------------------------------------------------------
 # Caché de velas: una sola descarga por TF (extendida según demanda), servida
@@ -113,8 +117,9 @@ def _entradas_de(res, escaneo):
     return entradas
 
 
-def simular(trade, lado, tp_nivel, df_sim):
-    """Camina las velas posteriores a la entrada: ¿SL o TP primero?"""
+def simular(trade, lado, tp_nivel, df_sim, tf_ciclo="30m"):
+    """Camina las velas posteriores a la entrada: ¿SL o TP primero?
+    El horizonte escala con el tamaño del ciclo operado (el TP es de ese tamaño)."""
     entrada, sl = trade['entrada'], trade['sl']
     riesgo = abs(sl - entrada)
     recompensa = abs(entrada - tp_nivel)
@@ -123,7 +128,7 @@ def simular(trade, lado, tp_nivel, df_sim):
     ratio = recompensa / riesgo
     hora = trade['hora']
     hora_naive = hora.tz_convert('UTC').tz_localize(None) if getattr(hora, 'tzinfo', None) else hora
-    fin_h = hora_naive + pd.Timedelta(days=HORIZONTE_DIAS)
+    fin_h = hora_naive + pd.Timedelta(days=HORIZONTE_POR_TF_CICLO.get(tf_ciclo, 7))
     velas = df_sim[(df_sim['open_time'] > hora_naive) & (df_sim['open_time'] <= fin_h)]
     for _, v in velas.iterrows():
         sl_hit = v['high'] >= sl if lado == "SELL" else v['low'] <= sl
@@ -184,7 +189,7 @@ def main():
                 if tf_p not in df_sim_cache:
                     df_sim_cache[tf_p] = get_klines_cacheado(SYMBOL, tf_p,
                                                              pd.Timestamp(args.desde) - pd.Timedelta(days=2))
-                sim = simular(t, lado, tp_nivel, df_sim_cache[tf_p])
+                sim = simular(t, lado, tp_nivel, df_sim_cache[tf_p], e['tf_ciclo'])
                 if sim is None:
                     continue
                 riesgo = abs(t['sl'] - t['entrada'])
