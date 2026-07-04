@@ -33,22 +33,43 @@ def _espacio_canonico(df, zona_max, zona_min, direction):
     return HI, LO, -zona_min, -zona_max, r, palabras
 
 
-def _entrada_profunda(df, HI, LO, zmax, r, palabras, p1_idx, p1_val, detalles):
+def _entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, detalles):
     """Patrón de Entrada Profunda (Sección 16). Contexto ya validado: llegada profunda
     (P1 cruzó la mitad de la zona) + proyección de engaños escapada (cambio irreversible).
 
     Pauta 3 Corta: entrada a mercado al toque del 61.8 del fibo dinámico de la Pauta 2
-    (la zona va del 61.8 al 80.9, medida desde el extremo). SL en el extremo de la llegada.
-    No existe entrada agresiva. Replay cronológico: el toque solo cuenta desde el instante
-    en que el escape se activó.
+    (la zona va del 61.8 al 80.9, medida desde el extremo). No existe entrada agresiva.
+      - SL DILATABLE (Secc 16): "el punto extremo MÁS PROFUNDO que haya dejado el
+        precio en la zona antes de iniciar el retroceso" — si la llegada profundiza,
+        el fibo se re-ancla en el nuevo extremo y el retroceso se re-mide desde ahí.
+      - Si la llegada escapa de la zona, el contexto muta a Engaño Extremo (Secc 17).
+      - Tras el gatillo, un retorno al extremo de la llegada = SL (P3_CORTA_ROTA).
+    Replay cronológico: el toque solo cuenta desde el instante del escape activo.
     """
     detalles["calidad"] = "ENTRADA PROFUNDA (Pauta 3 Corta)"
+    extremo = p1_val
     p2_run = LO[p1_idx]
     escape_activo = False
     for i in range(p1_idx + 1, len(df)):
+        if HI[i] > extremo:
+            # La llegada sigue profundizando: SL dilatable + re-anclaje del fibo.
+            # (Sin chequeo de gatillo en esta vela: no hay retroceso en curso.)
+            extremo = HI[i]
+            p2_run = LO[i]
+            if extremo > zmax:
+                # La "llegada" se salió de la zona: territorio del Engaño Extremo
+                if anulacion is not None:
+                    return _engano_extremo(df, HI, LO, r, palabras, i, extremo,
+                                           zmax, anulacion, p2_run, detalles)
+                return {"estado": "ANULADO_POR_ESCAPE",
+                        "mensaje": "La llegada profunda escapó de la zona.",
+                        "detalles": detalles, "idx_muerte": i}
+            continue
         if LO[i] < p2_run:
             p2_run = LO[i]
-        imp = p1_val - p2_run
+        imp = extremo - p2_run
+        if imp <= 0:
+            continue
         if not escape_activo and p2_run + (imp * ENGANO_1618) >= zmax:
             escape_activo = True
         if escape_activo:
@@ -57,20 +78,26 @@ def _entrada_profunda(df, HI, LO, zmax, r, palabras, p1_idx, p1_val, detalles):
                 n809 = p2_run + (imp * NIVEL_809)
                 detalles.update({"pauta2_price": r(p2_run), "impulso": imp,
                                  "entrada_p3_corta": r(n618), "limite_gestion_809": r(n809),
-                                 "stop_loss": r(p1_val), "hora_gatillo": df.loc[i, 'open_time']})
+                                 "stop_loss": r(extremo), "hora_gatillo": df.loc[i, 'open_time']})
+                # Verificación post-gatillo: retorno al extremo de la llegada = SL
+                for k in range(i + 1, len(df)):
+                    if HI[k] >= extremo:
+                        return {"estado": "P3_CORTA_ROTA",
+                                "mensaje": "El precio volvió al extremo de la llegada tras el gatillo (SL).",
+                                "detalles": detalles, "idx_muerte": k}
                 return {"estado": "P3_CORTA_GATILLO",
                         "mensaje": f"Entrada Profunda: toque del 61.8 en {r(n618):.2f}. "
-                                   f"{palabras['accion']} a mercado. SL {r(p1_val):.2f}",
+                                   f"{palabras['accion']} a mercado. SL {r(extremo):.2f}",
                         "detalles": detalles}
-    imp = p1_val - p2_run
+    imp = extremo - p2_run
     n618 = p2_run + (imp * NIVEL_618)
     n809 = p2_run + (imp * NIVEL_809)
     detalles.update({"pauta2_price": r(p2_run), "impulso": imp,
                      "entrada_p3_corta": r(n618), "limite_gestion_809": r(n809),
-                     "stop_loss": r(p1_val)})
+                     "stop_loss": r(extremo)})
     return {"estado": "ENTRADA_PROFUNDA_ESPERANDO",
             "mensaje": f"Entrada Profunda activa. Esperando retroceso al 61.8 ({r(n618):.2f}, "
-                       f"zona hasta {r(n809):.2f}). SL {r(p1_val):.2f}",
+                       f"zona hasta {r(n809):.2f}). SL {r(extremo):.2f}",
             "detalles": detalles}
 
 
@@ -101,6 +128,12 @@ def _doble_techo_impulso(df, HI, LO, r, palabras, idx_ruptura, dilatacion, extre
             detalles.update({"impulso_dt": imp, "extremo_impulso": r(ext),
                              "entrada_dt_618": r(n618), "limite_gestion_809": r(ext + imp * NIVEL_809),
                              "stop_loss": r(dilatacion), "hora_gatillo": df.loc[i, 'open_time']})
+            # Verificación post-gatillo (Secc 18): prohibido retestear la dilatación
+            for k in range(i + 1, len(df)):
+                if HI[k] >= dilatacion:
+                    return {"estado": "ROTO_POR_RETESTEO_DILATACION",
+                            "mensaje": "Retesteó la máxima dilatación tras el gatillo (SL).",
+                            "detalles": detalles, "idx_muerte": k}
             return {"estado": "DT_IMPULSO_GATILLO",
                     "mensaje": f"{palabras['dt']} con Impulso: toque del 61.8 en {r(n618):.2f}. "
                                f"{palabras['accion']} a mercado. SL {r(dilatacion):.2f}",
@@ -271,7 +304,7 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction, nivel_anulaci
     if escapado:
         if llegada_profunda:
             # Llegada profunda + escape -> Patrón de Entrada Profunda (Pauta 3 Corta)
-            return _entrada_profunda(df, HI, LO, zmax, r, palabras, p1_idx, p1_val, detalles)
+            return _entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, detalles)
         # Sin llegada profunda NO hay Entrada Profunda: no existe patrón (no consume contador).
         detalles["calidad"] = "DESCARTADA (escape de niveles sin llegada profunda)"
         if p2_locked:
@@ -407,6 +440,10 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction, nivel_anulaci
         for k in range(idx_gatillo + 1, len(df)):
             if HI[k] >= pico_engano:
                 estado = "ROTO_POR_STOP_LOSS" if HI[k] > pico_engano else "ROTO_POR_DOBLE_TOQUE"
+                # La entrada SÍ ocurrió (y murió): el backtest necesita saberlo
+                detalles["hora_gatillo"] = df.loc[idx_gatillo, 'open_time']
+                detalles["gatillo_agresivo"] = r(p1_val)
+                detalles["stop_loss"] = r(pico_engano)
                 detalles["idx_pico_engano"] = idx_pico
                 return {"estado": estado, "mensaje": "El precio volvió al extremo del engaño tras el gatillo.",
                         "detalles": detalles, "idx_muerte": k, "idx_pico_engano": idx_pico}
@@ -445,6 +482,7 @@ def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulaci
     p1_forzado = None            # ancla directa del siguiente engaño (Secc 14)
     perdida_valida_en_2 = False  # Secc 15: el volumen solo baja si el 2º dio pérdida válida
     ultimo_p1 = -1
+    historial = []               # TODA la cadena evaluada (para backtest: las entradas que murieron)
     ultimo_resultado = {"estado": "NO_INICIADO", "mensaje": "Error desconocido."}
 
     def _en_zona(idx):
@@ -477,6 +515,7 @@ def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulaci
                 res["detalles"]["sugerencia_volumen"] = "Volumen Normal"
 
         ultimo_resultado = res
+        historial.append(res)
 
         # Si el patrón EXISTIÓ y fracasó (SL, Doble Toque o No Proporcional roto),
         # el institucional hará uno nuevo: evolucionamos al siguiente engaño.
@@ -508,9 +547,11 @@ def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulaci
         # - ANULADO_SIN_SALIDA_DE_ZONA: la P2 no salió de la zona (trabajo interno, Secc 9)
         # - ROTO_POR_RETESTEO_DILATACION: Doble Techo/Suelo roto (Secc 18: nuevo análisis)
         # - EE_DESCARTADO_25: escape tímido, el Engaño Extremo se descarta (Secc 17)
+        # - P3_CORTA_ROTA: Entrada Profunda con SL tras el gatillo (no es un engaño,
+        #   no consume el contador; la zona sigue buscando estructura nueva)
         if res["estado"] in ("ANULADO_POR_ESCAPE", "ANULADO_VUELTA_EN_V",
                              "ANULADO_SIN_SALIDA_DE_ZONA", "ROTO_POR_RETESTEO_DILATACION",
-                             "EE_DESCARTADO_25"):
+                             "EE_DESCARTADO_25", "P3_CORTA_ROTA"):
             idx_muerte = res.get("idx_muerte", p1_idx + 1)
             siguientes_fractales = [f for f in fractals_en_zona if f >= idx_muerte and f > p1_idx]
             if siguientes_fractales:
@@ -521,6 +562,7 @@ def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulaci
 
         # Si el patrón está ACTIVO, FORMÁNDOSE, es CARENCIA VIVA, ENTRADA PROFUNDA,
         # DOBLE TECHO/SUELO CON IMPULSO o espera nueva Pauta 1, nos quedamos aquí
+        res["historial"] = historial
         return res
 
     if numero_engano > 3:
@@ -538,10 +580,15 @@ def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulaci
                                 "pauta1_time": df.loc[j, 'open_time'],
                                 "sugerencia_volumen": "Volumen Normal"}
                     origen_mov = float(LO[desde:j + 1].min())
-                    return _engano_extremo(df, HI, LO, r, palabras, j, HI[j],
-                                           zmax, anul, origen_mov, detalles)
-        return {"estado": "ZONA_AGOTADA", "mensaje": "Se rompieron 3 engaños. La zona ya no es válida para un 4to engaño (Descartada)."}
+                    res = _engano_extremo(df, HI, LO, r, palabras, j, HI[j],
+                                          zmax, anul, origen_mov, detalles)
+                    historial.append(res)
+                    res["historial"] = historial
+                    return res
+        return {"estado": "ZONA_AGOTADA", "historial": historial,
+                "mensaje": "Se rompieron 3 engaños. La zona ya no es válida para un 4to engaño (Descartada)."}
 
+    ultimo_resultado["historial"] = historial
     return ultimo_resultado
 
 # El escaneo de zonas reales vive en mdt_escaner.py (integración mapa->escáner);
