@@ -14,7 +14,7 @@ Tres reglas de arquitectura (usuario, 3 jul 2026):
 """
 import pandas as pd
 from mdt_data import get_binance_klines
-from mdt_math import evaluar_ciclo, apply_concurrency, format_z
+from mdt_math import calc_zones, evaluar_ciclo, apply_concurrency, format_z
 from mdt_fractal import extraer_puntos_control
 
 from mdt_config import (SYMBOL, ORIGEN_MACRO_BANDA, TF_LADDER, TF_MINUTOS,
@@ -229,9 +229,13 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
             # La zona del origen es operativa desde que abrió la excursión (Secc 8):
             # el escáner solo debe mirar velas de este episodio de trabajo. Su
             # anulación (Secc 17) es la muerte del ciclo (el ±38.2 fijo).
+            # TP (Secc 8): al trabajar la Parte Alta/Baja, el objetivo es la Zona
+            # del 61.8% de Alerta del nuevo Fibo Mayor (extremo excursión -> fin).
+            tp_zona = calc_zones(ev['extremo_excursion'], ev['fin_vigente'], direction)['MEDIA']
             extra = {"tf": c['tf'], "ancla": c['ancla'],
                      "operativa_desde": ev.get('hora_excursion'),
-                     "nivel_anulacion": ev['nivel_muerte']}
+                     "nivel_anulacion": ev['nivel_muerte'],
+                     "tp_zona": tp_zona}
             if direction == "BULLISH":
                 caja = z['BAJA']
                 buys.append({"name": f"{nombre} (Baja)", "z": caja, "peso": peso, **extra})
@@ -268,25 +272,27 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
              "operativa_desde": ev.get('hora_activacion')}
     # Anulación de cada zona (Secc 4/17): el siguiente nivel fibo que la mata.
     # Baja -> extensión 138.2 | Media -> el origen (100%) | Alta -> extensión -38.2.
+    # TP (Secc 7.2): "la zona contraria más alejada" DEL MISMO CICLO — para una
+    # señal de ventas, la Zona Baja del ciclo; para compras, su Zona Alta.
     origen, fin, imp = z['origen'], z['fin'], z['impulse']
     if direction == "BULLISH":
         anul = {"BAJA": origen - imp * 0.382, "MEDIA": origen, "ALTA": fin + imp * 0.382}
         buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso,
-                     "nivel_anulacion": anul["BAJA"], **extra})
+                     "nivel_anulacion": anul["BAJA"], "tp_zona": z['ALTA'], **extra})
         if not ev['media_muerta']:
             buys.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso,
-                         "nivel_anulacion": anul["MEDIA"], **extra})
+                         "nivel_anulacion": anul["MEDIA"], "tp_zona": z['ALTA'], **extra})
         sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso,
-                      "nivel_anulacion": anul["ALTA"], **extra})
+                      "nivel_anulacion": anul["ALTA"], "tp_zona": z['BAJA'], **extra})
     else:
         anul = {"ALTA": origen + imp * 0.382, "MEDIA": origen, "BAJA": fin - imp * 0.382}
         buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso,
-                     "nivel_anulacion": anul["BAJA"], **extra})
+                     "nivel_anulacion": anul["BAJA"], "tp_zona": z['ALTA'], **extra})
         sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso,
-                      "nivel_anulacion": anul["ALTA"], **extra})
+                      "nivel_anulacion": anul["ALTA"], "tp_zona": z['BAJA'], **extra})
         if not ev['media_muerta']:
             sells.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso,
-                          "nivel_anulacion": anul["MEDIA"], **extra})
+                          "nivel_anulacion": anul["MEDIA"], "tp_zona": z['BAJA'], **extra})
 
 
 def resolver_concurrencia(zonas, buy_or_sell, current_price=None, verbose=True):

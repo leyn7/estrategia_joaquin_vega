@@ -9,7 +9,7 @@ vivo debe re-validar con ancla_viva(mapa_fresco, ancla) antes de armar o
 disparar cualquier entrada (candado mapa->escáner).
 """
 import pandas as pd
-from mdt_config import TF_PATRON, TF_MINUTOS
+from mdt_config import TF_PATRON, TF_MINUTOS, RATIO_MINIMO
 from mdt_data import to_cot
 from mdt_macro_mapper import generar_mapa, _descargar, _ahora, ancla_viva
 
@@ -20,6 +20,51 @@ ESTADOS_OPERABLES = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO
                      "EE_GATILLO", "EE_ARMADO", "VALIDADO_POSTERIOR",
                      "ENTRADA_PROFUNDA_ESPERANDO", "DT_IMPULSO_ESPERANDO",
                      "ENGAÑO_EN_CURSO", "ESPERANDO_1618")
+
+
+def direccion_prioritaria(mapa):
+    """Secc 1/7.1: el Primer Ciclo (el mayor vigente cuya zona contiene al precio)
+    dicta la dirección del Movimiento Prioritario. Si el precio trabaja una zona de
+    compras del ciclo que manda, las compras son prioritarias; toda venta es un
+    Movimiento Secundario y debe operarse con menor volumen/riesgo (y viceversa)."""
+    precio = mapa['precio']
+    candidatos = [("SELL", z) for z in mapa['sells']] + [("BUY", z) for z in mapa['buys']]
+    for lado, z in sorted(candidatos, key=lambda t: -t[1]['peso']):
+        if z.get('z') and min(z['z']) <= precio <= max(z['z']):
+            return lado, z['name']
+    return None, None
+
+
+def _operacion(escaneo, prioritaria):
+    """Construye las 4 Informaciones (Secc 7) de una señal accionable:
+    entrada, SL estructural, TP (zona contraria / 61.8 de alerta), ratio 1:4
+    (Secc 1, al borde cercano de la zona objetivo — conservador) y la etiqueta
+    Prioritario/Secundario con su volumen."""
+    res = escaneo['resultado']
+    d = res.get('detalles', {})
+    lado = escaneo['lado']
+    entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
+               or d.get('entrada_dt_618') or d.get('espera_calmada'))
+    if entrada is None and res['estado'].startswith('EE_'):
+        # Engaño Extremo: la agresiva entra al cruzar de vuelta el límite exterior
+        entrada = escaneo['rango'][0] if lado == "SELL" else escaneo['rango'][1]
+    sl = d.get('stop_loss', d.get('extremo_escape'))
+    tp_zona = escaneo.get('tp_zona')
+    if entrada is None or sl is None or tp_zona is None:
+        return None
+    tp = max(tp_zona) if lado == "SELL" else min(tp_zona)  # borde cercano (conservador)
+    riesgo = abs(sl - entrada)
+    if riesgo <= 0:
+        return None
+    recompensa = abs(entrada - tp)
+    ratio = recompensa / riesgo
+    prioritario = prioritaria is None or lado == prioritaria
+    return {"entrada": entrada, "stop_loss": sl,
+            "tp_zona": (max(tp_zona), min(tp_zona)), "tp_nivel": tp,
+            "riesgo": riesgo, "recompensa": recompensa, "ratio": ratio,
+            "cumple_ratio": ratio >= RATIO_MINIMO,
+            "movimiento": "PRIORITARIO" if prioritario else "SECUNDARIO",
+            "volumen": "Normal" if prioritario else "Reducido (Movimiento Secundario, Secc 1)"}
 
 
 def escanear_mapa(cutoff=None, mapa=None, verbose=True):
@@ -62,10 +107,19 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
                                               nivel_anulacion=zona.get('nivel_anulacion'))
             escaneos.append({'zona': zona['name'], 'rango': (zmax, zmin), 'lado': lado,
                              'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
-                             'ancla': zona.get('ancla'),
+                             'ancla': zona.get('ancla'), 'tp_zona': zona.get('tp_zona'),
                              'operativa_desde': desde_op, 'resultado': res})
 
+    # Las 4 Informaciones (Secc 7) para cada señal accionable
+    prioritaria, zona_que_manda = direccion_prioritaria(mapa)
+    for e in escaneos:
+        if e['resultado']['estado'] in ESTADOS_OPERABLES:
+            e['operacion'] = _operacion(e, prioritaria)
+
     if verbose:
+        if zona_que_manda:
+            print(f"\nEL CICLO QUE MANDA: precio trabajando '{zona_que_manda}' -> "
+                  f"Movimiento Prioritario = {'COMPRAS' if prioritaria == 'BUY' else 'VENTAS'}")
         print("\n--- ESCÁNER DE PATRONES SOBRE EL MAPA (TF del patrón = 1 por debajo del ciclo) ---")
         for e in escaneos:
             res = e['resultado']
@@ -75,7 +129,17 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
             hora = res.get('detalles', {}).get('hora_gatillo')
             hora_txt = f" [gatillo: {hora}]" if hora is not None else ""
             print(f"      {res['estado']}: {res['mensaje']}{hora_txt}{marca}")
-    return {'mapa': mapa, 'escaneos': escaneos}
+            op = e.get('operacion')
+            if op:
+                veredicto = ("CUMPLE 1:4" if op['cumple_ratio']
+                             else f"NO CUMPLE 1:{RATIO_MINIMO:.0f} -> NO OPERAR (Secc 1)")
+                print(f"      OPERACIÓN: entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
+                      f"(riesgo {op['riesgo']:.2f}) | TP zona {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f} "
+                      f"(al borde: {op['recompensa']:.2f})")
+                print(f"      R:B 1:{op['ratio']:.1f} [{veredicto}] | {op['movimiento']} "
+                      f"| Volumen: {op['volumen']}")
+    return {'mapa': mapa, 'escaneos': escaneos,
+            'prioritaria': prioritaria, 'zona_que_manda': zona_que_manda}
 
 
 def revalidar_setup(escaneo, cutoff=None):

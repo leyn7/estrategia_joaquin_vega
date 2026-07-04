@@ -29,6 +29,10 @@ TF_PATRON = {"1d": "2h", "2h": "30m", "30m": "3m", "3m": "1m", "1m": "1m"}
 # Los sub-operables viven en el motor (desgrane/pendientes) sin zonas operativas.
 GRADO_MIN_OPERABLE_PCT = 0.01
 
+# --- Gestión monetaria (Secc 1) ---
+RATIO_MINIMO = 4.0   # Ratio Riesgo/Beneficio mínimo estricto 1:4
+MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bucle en vivo)
+
 # --- Números de la biblia (NO tocar: son la estrategia) ---
 ZONA_191 = 0.191     # tamaño de cada zona de trabajo (Secc 4)
 NIVEL_382 = 0.382    # activación del ciclo / extensiones de muerte ±38.2 (Secc 3 y 6)
