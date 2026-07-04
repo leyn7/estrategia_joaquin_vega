@@ -1,0 +1,351 @@
+y ahora vamos con algo importante que es
+
+ya que tenemos muchos conceptos y
+
+podemos iniciar el análisis de un mapa
+
+vamos entonces a buscar un punto de
+
+inicio que sea correcto
+
+y aquí es donde viene uno de los
+
+problemas más importantes que tiene
+
+cualquier operador donde iniciamos mapas
+
+porque viene dado este problema sin duda
+
+ninguna
+
+os habéis percatado está claro de que el
+
+broker sea el que sea el que utilicemos
+
+nos da diferentes temporalidades
+
+diferentes formas en las que podemos ver
+
+un gráfico siempre dependiendo de la
+
+cantidad de gráfico que nosotros
+
+queramos trabajar para ello el precio lo
+
+podemos ver en gráficos mensuales
+
+gráficos semanales gráficos diarios
+
+gráficos de cuatro horas horarios 30 15
+
+51 minutos metatrader por ejemplo nos da
+
+estas 9 temporalidades pero hay otras
+
+plataformas que incluso nos dan muchas
+
+más temporalidades
+
+yo quiero que reflexionéis sobre algo
+
+porque creéis vosotros que los brokers
+
+nos dan tantas temporalidades
+
+cuál es el motivo de que nos faciliten
+
+ver el gráfico de tan distinta forma
+
+dependiendo siempre de la cantidad de la
+
+data de gráfico que queramos ver
+
+creéis que es porque el broker
+
+piensa en nosotros y dice bueno vamos a
+
+darles a los operadores
+
+diferentes temporalidades para que cada
+
+uno pueda hacer el estilo de trading que
+
+le apetezca puede ser que el broker sea
+
+tan tan sumamente considerado que piense
+
+que vamos a querer les más porque nos
+
+facilitan este tipo de cosas
+
+pensáis que el broker piensa en nosotros
+
+cuando nos dan 9 temporalidades
+
+no sabéis para pensarlo alguna vez
+
+el broker
+
+en definitiva el negocio nos deja ver
+
+una cotización
+
+con más data o menos data más gráfico
+
+más cantidad de gráfico desde una data
+
+más atrás o una data más adelante
+
+simplemente para aliarnos
+
+el negocio hace como siempre que
+
+tengamos mucha posibilidad
+
+de graficación en cuestión de tamaño y
+
+esto hace ya que empecemos a tener los
+
+primeros problemas y dónde empieza mi
+
+análisis ya tengo una metodología x la
+
+que tengáis donde empiezo
+
+empiezo mensuales empiezo en horarios
+
+empiezo en cuatro horas empiezo en
+
+quince minutos tengo que mirar primero
+
+los gráficos grandes los más grandes y
+
+luego bajarme los gráficos más pequeños
+
+y si son los grandes cuál es el grande
+
+empieza a trabajar desde diarios para
+
+abajo desde semanales para abajo desde
+
+mensuales para abajo
+
+cuál es lo correcto qué es lo correcto y
+
+da igual con el método que tengáis
+
+os voy a hacer la pregunta de otra
+
+manera
+
+vosotros creéis que si todos los brokers
+
+absolutamente todos nos dieran una única
+
+temporalidad si esto fuera así
+
+todos los operadores tendrían solo la
+
+opción de trabajar con una única
+
+temporalidad me da igual la que queráis
+
+imaginaros que ponen por ejemplo por
+
+deciros algo
+
+horario solo nos dejan ver el gráfico en
+
+franja horaria
+
+pensáis que los operadores
+
+trabajarían mejor
+
+con el método que sea pensáis que el
+
+operador con el método que sea tendría
+
+mejores resultados si solo trabajáramos
+
+en una única temporalidad
+
+qué os parece
+
+está claro que sea con el método que sea
+
+si solo trabajáramos una única
+
+temporalidad todos tendríamos unos
+
+análisis mucho más fáciles
+
+empezando por el punto de origen
+
+trabajaríamos una cantidad de gráfico
+
+muy concreta y a partir de ahí no habría
+
+más problema para la hora de iniciar
+
+nuestros mapas pero es que tenemos nueve
+
+o diez o doce o catorce dependiendo del
+
+broker desde dónde empieza y luego está
+
+la otra faena y hasta dónde llego
+
+cuántas temporalidades trabajo trabajo
+
+sobre 1 2 3 4 por cual empiezo y cuantas
+
+bajo donde acabó mi análisis
+
+aquí viene uno de los grandes problemas
+
+que tiene el público con el método que
+
+sea
+
+tenéis que entonces tener claro que como
+
+no inicies un mapa un análisis con el
+
+método que sea
+
+con nosotros por supuesto tenemos que
+
+escoger esos puntos correctos pero como
+
+escojamos un mal punto nuestro análisis
+
+ya tiene carencias va a tener carencias
+
+por tanto necesitamos saber desde dónde
+
+iniciar nuestros análisis nuestras mapas
+
+desde puntos correctos
+
+es lo que vamos a hacer ahora
+
+mira nosotros vamos a trabajar mediante
+
+fractales
+
+bien
+
+este en la temporalidad en la que este
+
+da igual este por ejemplo es un gráfico
+
+mensual lo primero que voy a tener que
+
+hacer es buscar un punto de origen
+
+correcto
+
+como buscamos un punto de origen
+
+correcto mirar
+
+lo primero que nosotros vamos a querer
+
+trabajar siempre dentro de la cantidad
+
+de gráfico que estemos trabajando es
+
+saber cuál es el fractal mayor que hay
+
+en la cantidad de gráfico que tengamos
+
+delante
+
+cuál es la fractalidad mayor
+
+en la cantidad de gráfico que nosotros
+
+hemos decidido empezar a trabajar si ese
+
+mensual es mensual si es en diario en
+
+diario si es en horario en horario si es
+
+en 30 en 30 donde sea
+
+yo siempre os recomendaré que nunca
+
+empecéis gráfico nunca empezáis a
+
+analizar un mapa por debajo de 4 horas
+
+es fácil el saber el por qué y quiero
+
+que hoy en este vídeo veamos el por qué
+
+pensar una cosa la única forma de que
+
+nosotros sepamos en un gráfico las
+
+probabilidades de lo que puede hacer el
+
+precio en el futuro no estar adivinando
+
+si no hablamos de probabilidades es
+
+analizando lo que ya hizo
+
+el sentido común entonces dice que
+
+cuanto más gráfico tenga
+
+más datos tengo de lo que hizo
+
+cuanto menos gráfico tenga menos datos
+
+tengo de lo que hizo
+
+no sólo eso
+
+cuanto más arriba empiece mi análisis
+
+cuanta más cantidad de información
+
+trabaje mi información es más potente
+
+porque la información viene de
+
+muchísimos años atrás
+
+cuanto más cerca del precio empiece mi
+
+análisis la información es más frágil
+
+esto es puro sentido común nunca os
+
+recomendaré no digo que no lo podáis
+
+hacer veremos que sí pero nunca os
+
+recomendaré que busquéis un punto de
+
+inicio para vuestros mapas que esté por
+
+debajo de 4 horas que esté o en cuatro
+
+horas o en diario o en semanal o en
+
+mensual y luego ya queráis bajar donde
+
+queráis bajar es decir puedo empezar en
+
+cuatro horas y llegar hasta 15 minutos
+
+también tendremos que decidir hasta
+
+dónde llegamos pero ahora nos centramos
+
+en el punto de inicio
+
+

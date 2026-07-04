@@ -32,8 +32,13 @@ TF_PATRON = {"1d": "4h", "2h": "1h", "30m": "15m", "3m": "1m", "1m": "1m"}
 # Los sub-operables viven en el motor (desgrane/pendientes) sin zonas operativas.
 GRADO_MIN_OPERABLE_PCT = 0.01
 
-# --- Gestión monetaria (Secc 1) ---
-RATIO_MINIMO = 4.0   # Ratio Riesgo/Beneficio mínimo estricto 1:4
+# --- Gestión monetaria (Secc 1 y 20) ---
+# Video GESTIÓN EN BENEFICIO: "nunca entraremos a mercado a por operaciones que
+# al menos no nos den un 1 a 3" — el 1:4 del resumen viejo era una de las combos
+# (parcial 1:2 -> final 1:4), no el mínimo de entrada.
+RATIO_MINIMO = 3.0   # Ratio Riesgo/Beneficio mínimo de ENTRADA (1:3)
+PARCIAL_R = 2.0      # Punto de descarga de presión (parcial mínimo 1:2, Secc 20)
+FINAL_R = 4.0        # Objetivo final = doble del parcial (perfil estándar 1:2 -> 1:4)
 MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bucle en vivo)
 
 # --- Preferencia operativa (usuario, 4 jul 2026) ---

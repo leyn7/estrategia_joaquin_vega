@@ -4,8 +4,9 @@ Este documento es una recopilación de todas las reglas matemáticas y conceptua
 
 ## 1. Filosofía de Gestión (Gestión Monetaria)
 - **Límite Operativo Diario:** Máximo 4 operaciones al día.
-- **Ratio Riesgo/Beneficio:** Mínimo estricto de **1:4**.
-- **Movimientos Secundarios (Volumen):** Operar a favor de la dirección que dicta el Primer Ciclo Macro es el "Movimiento Prioritario". Cualquier operación en contra de esta dirección es un "Movimiento Secundario" y **debe operarse con menor volumen/riesgo**.
+- **Ratio Riesgo/Beneficio (corregido con video GESTIÓN EN BENEFICIO):** El mínimo absoluto para entrar a mercado es **1:3** — "nunca entraremos a mercado a por operaciones que al menos no nos den un 1 a 3". Se puede (y se busca) ir a por más, pero con la mecánica de parciales de la Sección 20.
+- **Acierto realista:** Asumir un **50% de acierto a largo plazo**, da igual el método ("tú vas a acertar la mitad de lo que hagas"). Por eso los ratios 1:1 y 1:2 no sirven. Los balances se hacen **anuales**, nunca de menos de un año.
+- **Movimientos Secundarios (Volumen):** Operar a favor de la dirección que dicta el ciclo cuya zona se está trabajando activamente es el "Movimiento Prioritario" ("eso nos lo marca la zona" — video Fibo de seguimiento). Cualquier operación en contra es un "Movimiento Secundario" y **debe operarse con menor volumen/riesgo**.
 
 ## 2. El Mapeo del Gráfico (Orígenes y Temporalidades)
 - **Punto de Inicio (La Trampa de las Temporalidades):** Los brokers ofrecen múltiples temporalidades (M1, M15, H1, etc.) con el único objetivo de "liar" y confundir al operador. La regla de oro es **NUNCA mapear el ciclo macro en temporalidades menores a 4 Horas (H4)**. El Origen Absoluto de un mapa debe buscarse en Mensual, Semanal, Diario o H4. ¿Por qué? Porque a mayor cantidad de gráfico y datos, más potente y robusta es la información institucional. Empezar un análisis macro muy cerca del precio actual (temporalidades menores) hace que la información sea frágil. Una vez anclado el Macro en >=H4, ya podremos bajar a buscar pautas.
@@ -36,16 +37,21 @@ El **Primer Ciclo (Macro)** es el que manda (Ciclos 2 al 5 solo añaden informac
 - **Falsa Rotura (Entrada):** Si el precio entra en una zona, rompe el límite, pero la distancia de rotura es **menor a 1/3 del ciclo** y es rechazado, entramos.
 
 ## 6. Invalidación de Zonas y Ciclos (Cuándo NO operar)
-- **Muerte de una Zona:** Si el precio alcanza el siguiente nivel Fibo, la zona **muere para siempre**.
-- **Muerte del Ciclo Completo:** Todo el ciclo muere si el precio toca cualquiera de las dos extensiones extremas: **-38.2% o 138.2%**.
+- **Superar el límite NO rompe la zona (video CICLOS. Rotura de zonas):** si el precio se sale del límite exterior de una zona, la zona **no está rota — solo no es operable en ese momento**; si el precio vuelve a entrar, vuelve a ser operable ("no estás rota, no estás operable").
+- **Muerte de una Zona:** Solo si el precio alcanza el siguiente nivel Fibo, la zona **muere para siempre** y se quita del fibo.
+- **Muerte del Ciclo Completo:** Todo el ciclo muere si el precio toca cualquiera de las dos extensiones extremas: **-38.2% o 138.2%**. Un ciclo sigue siendo útil mientras conserve **al menos una zona útil**.
+- **El 38.2 como soporte/resistencia:** desde que el ciclo se valida, su nivel/zona 38.2 actúa **para siempre (mientras el ciclo viva)** como zona de rebote — no es zona de trabajo operable, pero es sitio a vigilar para parciales y reacciones.
 
 ## 7. Gestión Dinámica y Stop Loss (Protección en Gráfico)
 - **Las 4 Informaciones del Ciclo Mayor:** Cada vez que el precio trabaja una zona del Ciclo Principal, nos da 4 datos innegociables antes de buscar otro ciclo:
   1. **¿Hacia dónde? (Dirección y Volumen):** Si originó en zona de Ventas, las ventas son el "Movimiento Prioritario" (volumen normal). Toda compra es un "Movimiento Secundario" y exige operar con menor volumen/riesgo.
   2. **¿Hasta dónde? (Recorrido Potencial):** El Take Profit macro siempre apunta a la "zona contraria más alejada que tenga el mapa" (ej. de Zona Alta de Ventas hasta la Zona Baja de Compras del mismo ciclo).
   3. **¿Dónde te anulan? (Stop Loss Estructural):** Al entrar en la Zona Media (61.8%), el SL inicial va al origen absoluto. Pero **ATENCIÓN:** Si el precio avanza a favor y toca el nivel 38.2%, la anulación cambia. El SL se mueve al límite exterior de la caja del 61.8% ("el precio ya no debería volver a entrar en zona").
-  4. **¿Qué te permite? (Fibo de Seguimiento):** Una vez en el mercado, se traza un Fibo dinámico al impulso generado. Se le permite al precio retroceder hasta la zona del 61.8% de seguimiento.
-- **Acotar la Zona de Seguimiento:** Si la caja del 61.8% del Fibo de Seguimiento se superpone/interfiere con el nivel estricto de anulación (Stop Loss), la zona de seguimiento DEBE "acotarse" (recortarse) para dejar al menos la mitad libre y asegurar que el retroceso permitido nunca toque la anulación. Si el precio rompe este seguimiento, se cierra el 50% de la posición.
+  4. **¿Qué te permite? (Fibo de Seguimiento):** SIEMPRE que hay origen de movimiento creado (hayamos entrado o no) se traza el Fibo de Seguimiento **desde el origen del movimiento**, y se le va siguiendo: "mi zona de seguimiento va a ir cambiando de sitio y de tamaño" (dinámico). **Solo interesa su zona del 61.8** — ninguna otra. Se le permite al precio retroceder como máximo a esa zona.
+- **Gestión (regla del pip):** si el retroceso supera **por un solo pip** el límite de la zona 61.8 de seguimiento, **la mitad de la posición se va fuera inmediatamente, sin dudar**; el stop de la otra mitad se queda donde estaba ("tú a mí no me vas a comer un stop completo jamás").
+- **Incorporación:** si nos perdimos la entrada en el origen, el retroceso a la zona 61.8 de seguimiento es **muy buen sitio para incorporarse** a favor del movimiento — con exactamente la misma gestión de protección.
+- **Acotar la Zona de Seguimiento (solo en trabajos de zonas 61.8):** cuando el precio ya tocó el 38.2 del ciclo, la anulación cambia (volver a la zona sería un "segundo trabajo"). La zona de seguimiento solo es válida si tiene **la mitad libre** antes de la zona de trabajo original → se **acota** en ese límite. Si no tiene la mitad libre (p.ej. coincide con la anulación), el fibo de seguimiento **no sirve de nada** — ni para gestionar ni para incorporarse.
+- **En Partes Altas/Bajas NO existe el "segundo trabajo":** la anulación es SIEMPRE el origen del movimiento (jamás se vigila un 38.2 ahí), no hay problema de mitad libre, y lo único que hay son **evoluciones** (primera, segunda, tercera...). El 38.2 de la evolución es zona de rebote: **sitio para sacar parciales**.
 
 ## 8. Protocolo de Trabajo en Partes Altas / Bajas (Evolución a Ciclo Mayor)
 - **Anulación Inmediata:** Al tocar la Parte Alta/Baja, se borran las demás zonas internas.
@@ -248,6 +254,37 @@ Al trabajar con más de un ciclo (ej. un Ciclo Mayor Macro y un Ciclo Menor o Su
 ### Caso 3: El Sándwich (Ataque a Zona Mayor)
 - **Escenario:** El precio se acerca a la concurrencia y **primero ataca a la Zona Mayor**. La Zona Menor está escondida o solapada en la parte de atrás de la Zona Mayor (como un sándwich).
 - **Regla Estricta:** La Zona Menor **JAMÁS SIRVE** en este escenario. Directamente se elimina del gráfico y toda la operativa se centra exclusivamente en la Zona Mayor.
+
+## 20. Plan de Negocio y Gestión en Beneficio (videos DEFINE TU PLAN / STOPS / DOLOR / GESTIÓN EN BENEFICIO)
+
+### El Plan de Negocio (reglas duras, jamás se saltan)
+- **Capital mínimo** para cuenta real: **2.000–3.000 EUR** ("nunca me empecéis a operar en real con menos").
+- **Riesgo mensual máximo: 10%** de la cuenta (elegible entre 5% y 10%). Se planifica mensual o quincenalmente — no más estricto. El plan se **recalcula a primeros de cada mes** con el capital vigente.
+- **Riesgo máximo por operación: 0.5% del capital total** de la cuenta (no del presupuesto mensual). Con 2.000 EUR → operaciones de máximo 10 EUR de riesgo, sin excepción.
+- **Entrada mínima: 0.02 lotes** — imprescindible para poder sacar parciales tanto en beneficio como en protección (con 0.01 no se puede gestionar).
+- **Patrones con carencias o segundos patrones en la misma zona: conviene rebajar la entrada** (menos riesgo que el estándar).
+- Saltarse el plan una sola vez = no hay control mental. "No se entrena: o se hace o no se hace."
+
+### Precios Máximos de Dolor (personales, IMPORTANTÍSIMO)
+- Cada operador define la pérdida máxima que no le duele **nada**: por **operación**, por **día**, por **semana** y por **mes**. Jamás se superan.
+- **No dependen del tamaño de la cuenta — dependen de la mente.** El plan de negocio debe respetarlos siempre (si el 0.5% supera tu dolor por operación, manda el dolor).
+
+### Franja de Stops y Cartera
+- Cada operador define su **franja de stops** (mínimo–máximo) según su operativa y capital, y **nunca se sale de ella**: una operación que exija un stop fuera de la franja "no es para ti" (o se busca la forma de que exija menos). Ejemplo del curso: en forex jamás stops menores a 12 pips.
+- **Cartera: solo activos que DOMINAS** (mapa 100% actualizado a diario), idealmente ~5–7. Activos **guía de su sector** (S&P, DAX, EURUSD...), baratos y volátiles. Ojo con los que tienen cierres diarios (gaps) si dejas operaciones abiertas.
+
+### Gestión en Beneficio (puntos de descarga de presión)
+- **Mínimo de entrada 1:3.** Si se buscan objetivos finales mayores a 1:3, es **OBLIGATORIO** usar puntos de descarga de presión (parciales):
+  - Al tocar el parcial: se saca **⅓ o ½ de la posición** y/o **SIEMPRE stop a breakeven** (stop a 0) — con o sin toma de beneficio, el stop va a 0.
+  - **El parcial mínimo jamás es inferior a 1:2**, y el objetivo final va **siempre al doble del parcial**:
+    | Perfil | Parcial | Final |
+    |---|---|---|
+    | Conservador | (sin parcial) | 1:3 seco |
+    | Estándar | 1:2 | 1:4 |
+    | Medio | 1:3 | 1:6 |
+    | Atrevido | 1:4 | 1:8 |
+- La elección del perfil es **personal e intransferible** (depende del control mental de cada uno: objetivos más lejanos = menor % de acierto + más operaciones en breakeven). Una vez elegida, **no se cambia jamás**.
+- **Umbral profesional:** demostrarse un **1% de media mensual durante un año completo** (12% anual) antes de siquiera pensar en vivir del trading.
 
 ---
 *Nota Técnica Futura (Para Desarrollo del Bot):* 
