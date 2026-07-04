@@ -20,7 +20,7 @@ parser.add_argument("--cutoff", default=None, help="Hora Bogotá: ignora todo lo
 parser.add_argument("--direction", default="BULLISH", choices=["BULLISH", "BEARISH"])
 args = parser.parse_args()
 
-BOG = 'America/Bogota'
+from mdt_config import SYMBOL, TZ_LOCAL as BOG
 
 def a_utc(s):
     return pd.Timestamp(s, tz=BOG).tz_convert('UTC').tz_localize(None)
@@ -103,7 +103,7 @@ if res.get('pendientes'):
 # candidato dominante a próximo punto de control (dilata mientras deje nuevos extremos)
 from mdt_data import get_binance_klines
 
-df_post = get_binance_klines("BNBUSDT", res['tf_macro'],
+df_post = get_binance_klines(SYMBOL, res['tf_macro'],
                              start_time=pd.Timestamp(res['origen_time']).tz_localize('UTC'))
 if cutoff is not None:
     df_post = df_post[df_post['open_time'] <= cutoff].reset_index(drop=True)

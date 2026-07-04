@@ -2,8 +2,9 @@ import pandas as pd
 import requests
 import time
 
+from mdt_config import SYMBOL, TZ_LOCAL
+
 REQUEST_TIMEOUT = 15  # segundos: el bot nunca debe quedarse colgado esperando a Binance
-TZ_LOCAL = 'America/Bogota'  # zona horaria del operador (COT)
 
 
 def to_cot(serie_o_ts):
@@ -21,7 +22,7 @@ def _fetch_klines(url, params):
         raise RuntimeError(f"Respuesta inesperada de Binance para {params.get('symbol')}: {data}")
     return data
 
-def get_binance_klines(symbol="BNBUSDT", interval="1d", start_time=None):
+def get_binance_klines(symbol=SYMBOL, interval="1d", start_time=None):
     url = "https://fapi.binance.com/fapi/v1/klines"
     all_klines = []
 

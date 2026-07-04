@@ -17,23 +17,8 @@ from mdt_data import get_binance_klines
 from mdt_math import evaluar_ciclo, apply_concurrency, format_z
 from mdt_fractal import extraer_puntos_control
 
-# --- Configuración ---
-SYMBOL = "BNBUSDT"
-# Origen del ciclo macro alcista, elegido por análisis de muñecas rusas (mínimo de
-# junio 2022 en ~183 USDT). Se localiza la ÚLTIMA vela diaria cuyo low cae en la banda.
-ORIGEN_MACRO_BANDA = (182.0, 183.5)
-
-# Cascada de temporalidades, de gruesa a fina (Regla 1: siempre termina en 1m)
-TF_LADDER = ["1d", "2h", "30m", "3m", "1m"]
-TF_MINUTOS = {"1d": 1440, "2h": 120, "30m": 30, "3m": 3, "1m": 1}
-MIN_VELAS_TF = 40          # una TF con menos velas que esto no aporta estructura
-MAX_VELAS_DESCARGA = 15000  # presupuesto de velas por descarga (1m -> ~10 días de cola)
-
-# Capa operativa (regla usuario 3 jul 2026): los miniciclos no valen la pena operarse.
-# Un ciclo es OPERABLE si su grado (retroceso del ancla) >= 1% del precio actual.
-# Los sub-operables siguen vivos en el motor (desgrane, pendientes, precisión del
-# mapa) pero no generan zonas operativas ni deben alimentar al escáner de patrones.
-GRADO_MIN_OPERABLE_PCT = 0.01
+from mdt_config import (SYMBOL, ORIGEN_MACRO_BANDA, TF_LADDER, TF_MINUTOS,
+                        MIN_VELAS_TF, MAX_VELAS_DESCARGA, GRADO_MIN_OPERABLE_PCT)
 
 
 def _ahora():

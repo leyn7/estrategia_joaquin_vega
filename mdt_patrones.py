@@ -550,9 +550,11 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
     return ultimo_resultado
 
 if __name__ == "__main__":
-    print("Descargando velas M3 de BNBUSDT para prueba (Últimas 10 horas)...")
-    df_m3 = get_binance_klines("BNBUSDT", "3m").tail(200).reset_index(drop=True)
-    df_m3['open_time'] = df_m3['open_time'].dt.tz_localize('UTC').dt.tz_convert('America/Bogota')
+    from mdt_config import SYMBOL
+    from mdt_data import to_cot
+    print(f"Descargando velas M3 de {SYMBOL} para prueba (Últimas 10 horas)...")
+    df_m3 = get_binance_klines(SYMBOL, "3m").tail(200).reset_index(drop=True)
+    df_m3['open_time'] = to_cot(df_m3['open_time'])
     
     zona_max = 573.74
     zona_min = 565.14
