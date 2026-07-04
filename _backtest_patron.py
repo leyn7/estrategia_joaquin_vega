@@ -16,6 +16,7 @@ ZMAX = float(sys.argv[3]) if len(sys.argv) > 3 else 554.18
 ZMIN = float(sys.argv[4]) if len(sys.argv) > 4 else 551.91
 DIRECTION = sys.argv[5].upper() if len(sys.argv) > 5 else "SELL"
 SYMBOL = sys.argv[6] if len(sys.argv) > 6 else "BNBUSDT"
+ANULACION = float(sys.argv[7]) if len(sys.argv) > 7 else None  # nivel que mata la zona (Secc 17)
 
 CUTOFF = datetime.fromisoformat(CUTOFF_STR).replace(tzinfo=timezone.utc)
 CUTOFF_MS = int(CUTOFF.timestamp() * 1000)
@@ -29,7 +30,7 @@ zona_max, zona_min = ZMAX, ZMIN
 print(f"Velas {INTERVAL}: {len(df)} | Cutoff: {CUTOFF_STR} UTC | Ultima cerrada: {df.iloc[-1]['open_time'].strftime('%m-%d %H:%M')} COT | Close: {df.iloc[-1]['close']:.2f}")
 print(f"Zona: {zona_max} a {zona_min} | Mitad: {(zona_max+zona_min)/2:.2f}\n")
 
-res = detect_patron_institucional(df, zona_max, zona_min, DIRECTION)
+res = detect_patron_institucional(df, zona_max, zona_min, DIRECTION, nivel_anulacion=ANULACION)
 print(f"Estado: {res['estado']}")
 print(f"Mensaje: {res['mensaje']}")
 if "detalles" in res:

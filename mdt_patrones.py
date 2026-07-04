@@ -116,8 +116,78 @@ def _doble_techo_impulso(df, HI, LO, r, palabras, idx_ruptura, dilatacion, extre
             "detalles": detalles}
 
 
-def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
+def _engano_extremo(df, HI, LO, r, palabras, idx_escape, extremo_inicial,
+                    zmax, anulacion, origen_mov, detalles):
+    """Patrón de Engaño Extremo (Sección 17) — la última oportunidad de la zona.
+
+    Contexto ya validado: el precio rompió el límite exterior de la Zona de
+    Decisión sin haber tocado la anulación. El espacio [límite, anulación] es la
+    Zona de Indecisión: mientras el precio flota ahí, ES INOPERABLE.
+      - Regla del 25%: el engaño extremo solo es válido si el precio se adentra
+        al menos el 25% de la longitud total de la indecisión (busca liquidez
+        profunda). Un escape más tímido se descarta: probable sacudida mayor.
+      - Entrada agresiva: en el instante en que, cumplido el >=25%, el precio
+        vuelve a cruzar la línea hacia el interior de la zona (1 pip, sin cierres).
+      - SL: en el extremo absoluto que dejó el engaño en la indecisión.
+      - Si toca la anulación, la zona muere con el ciclo (lo confirma el mapa).
+      - Fibo de seguimiento desde el origen absoluto del movimiento (el extremo
+        de la P2 que originó la subida al escape) para la entrada calmada 61.8.
+    """
+    detalles["calidad"] = "ENGAÑO EXTREMO (Secc 17)"
+    span = anulacion - zmax
+    ext = extremo_inicial
+    for i in range(idx_escape, len(df)):
+        if HI[i] > ext:
+            ext = HI[i]
+        if ext >= anulacion:
+            return {"estado": "ANULADO_POR_ESCAPE",
+                    "mensaje": f"El escape tocó la anulación ({r(anulacion):.2f}): zona y ciclo muertos.",
+                    "detalles": detalles, "idx_muerte": i}
+        profundidad = ext - zmax
+        valido = profundidad >= span * 0.25
+        if LO[i] <= zmax:
+            # El precio volvió a meterse al interior de la Zona de Decisión
+            if valido:
+                imp = ext - origen_mov
+                seg618 = ext - imp * NIVEL_618
+                detalles.update({"stop_loss": r(ext), "gatillo_agresivo": r(zmax),
+                                 "profundidad_indecision": profundidad,
+                                 "espera_calmada": r(seg618), "fibo_seguimiento_618": r(seg618),
+                                 "hora_gatillo": df.loc[i, 'open_time']})
+                # Verificación post-gatillo: el precio no debe volver al extremo del escape
+                for k in range(i + 1, len(df)):
+                    if HI[k] >= ext:
+                        detalles["idx_pico_engano"] = i
+                        return {"estado": "ROTO_POR_STOP_LOSS",
+                                "mensaje": "El precio volvió al extremo del engaño extremo tras el gatillo.",
+                                "detalles": detalles, "idx_muerte": k}
+                return {"estado": "EE_GATILLO",
+                        "mensaje": f"Engaño Extremo válido ({profundidad:.2f} = {profundidad / span:.0%} de la indecisión). "
+                                   f"{palabras['accion']} a mercado al cruce de {r(zmax):.2f}. SL {r(ext):.2f}",
+                        "detalles": detalles}
+            return {"estado": "EE_DESCARTADO_25",
+                    "mensaje": f"Escape tímido ({profundidad:.2f} < 25% de la indecisión {span:.2f}): "
+                               "se descarta, probable sacudida más potente después.",
+                    "detalles": detalles, "idx_muerte": i}
+    # Sigue flotando en la indecisión: inoperable (Secc 17)
+    detalles.update({"extremo_escape": r(ext), "profundidad_indecision": ext - zmax,
+                     "regla_25": r(zmax + span * 0.25)})
+    if ext - zmax >= span * 0.25:
+        return {"estado": "EE_ARMADO",
+                "mensaje": f"Engaño Extremo ARMADO (se adentró {ext - zmax:.2f} >= 25% de la indecisión). "
+                           f"{palabras['accion']} agresiva si el precio cruza de vuelta {r(zmax):.2f}. SL {r(ext):.2f}",
+                "detalles": detalles}
+    return {"estado": "EE_EN_INDECISION",
+            "mensaje": f"Precio en Zona de Indecisión (inoperable): necesita adentrarse hasta "
+                       f"{r(zmax + span * 0.25):.2f} (25%) para armar el Engaño Extremo.",
+            "detalles": detalles}
+
+
+def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction, nivel_anulacion=None):
     HI, LO, zmax, zmin, r, palabras = _espacio_canonico(df, zona_max, zona_min, direction)
+    anulacion = None
+    if nivel_anulacion is not None:
+        anulacion = nivel_anulacion if direction == "SELL" else -nivel_anulacion
 
     p1_val = HI[p1_idx]
     p2_val = LO[p1_idx]
@@ -229,6 +299,10 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
             if HI[j] > pico_evo:
                 pico_evo = HI[j]; idx_pico_evo = j
                 if pico_evo > zmax:
+                    if anulacion is not None:
+                        # Secc 17: escape de la zona sin anulación conocida tocada -> Engaño Extremo
+                        return _engano_extremo(df, HI, LO, r, palabras, j, pico_evo,
+                                               zmax, anulacion, p2_val, detalles)
                     return {"estado": "ANULADO_POR_ESCAPE", "mensaje": "Escape de zona durante patrón no proporcional", "detalles": detalles, "idx_muerte": j}
             if LO[j] < p2_val:
                 detalles["extremo_evolucion"] = r(pico_evo)
@@ -258,6 +332,12 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
             if h >= fibo_1618:
                 toco_1618 = True; pico_engano = h; idx_pico = j
                 tercio_ext = None  # regresó y consumió el 161.8: vuelve a mandar el engaño
+                if pico_engano > zmax:
+                    # La vela que consumió el 161.8 escapó de la zona en el acto
+                    if anulacion is not None:
+                        return _engano_extremo(df, HI, LO, r, palabras, j, pico_engano,
+                                               zmax, anulacion, p2_val, detalles)
+                    return {"estado": "ANULADO_POR_ESCAPE", "mensaje": "Escape de zona tras tocar 161.8%", "detalles": detalles, "idx_muerte": j}
                 if carencia_idx is not None:
                     # Era un engaño fraccionado: regresó y consumió el 161.8%. Se completa.
                     carencia_idx = None
@@ -311,7 +391,11 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
                             "detalles": detalles, "idx_muerte": j, "idx_pico_engano": idx_pico}
                 if h > pico_engano:
                     pico_engano = h
-                    if pico_engano > zmax: return {"estado": "ANULADO_POR_ESCAPE", "mensaje": "Escape de zona tras tocar 161.8%", "detalles": detalles, "idx_muerte": j}
+                    if pico_engano > zmax:
+                        if anulacion is not None:
+                            return _engano_extremo(df, HI, LO, r, palabras, j, pico_engano,
+                                                   zmax, anulacion, p2_val, detalles)
+                        return {"estado": "ANULADO_POR_ESCAPE", "mensaje": "Escape de zona tras tocar 161.8%", "detalles": detalles, "idx_muerte": j}
                 idx_pico = j  # el engaño sigue dilatándose: se re-arma la confirmación
             # Gatillo agresivo: cruza el punto de engaño por 1 pip, SIN esperar cierres
             if l <= p1_val:
@@ -346,7 +430,7 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction):
     return {"estado": "ENGAÑO_EN_CURSO", "mensaje": "Esperando Gatillo.", "detalles": detalles}
 
 
-def detect_patron_institucional(df, zona_max, zona_min, direction):
+def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulacion=None):
     peaks, troughs = find_micro_fractals(df)
     fractals = peaks if direction == "SELL" else troughs
 
@@ -379,7 +463,7 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
                 break
             p1_idx = fractales_validos[0]
         ultimo_p1 = p1_idx
-        res = evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction)
+        res = evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction, nivel_anulacion)
 
         # Añadimos metadatos del nivel de engaño
         nombre_engano = "PRIMER ENGAÑO" if numero_engano == 1 else "SEGUNDO ENGAÑO" if numero_engano == 2 else "TERCER ENGAÑO"
@@ -423,8 +507,10 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
         # - ANULADO_VUELTA_EN_V: solo 2 pautas (Secc 9)
         # - ANULADO_SIN_SALIDA_DE_ZONA: la P2 no salió de la zona (trabajo interno, Secc 9)
         # - ROTO_POR_RETESTEO_DILATACION: Doble Techo/Suelo roto (Secc 18: nuevo análisis)
+        # - EE_DESCARTADO_25: escape tímido, el Engaño Extremo se descarta (Secc 17)
         if res["estado"] in ("ANULADO_POR_ESCAPE", "ANULADO_VUELTA_EN_V",
-                             "ANULADO_SIN_SALIDA_DE_ZONA", "ROTO_POR_RETESTEO_DILATACION"):
+                             "ANULADO_SIN_SALIDA_DE_ZONA", "ROTO_POR_RETESTEO_DILATACION",
+                             "EE_DESCARTADO_25"):
             idx_muerte = res.get("idx_muerte", p1_idx + 1)
             siguientes_fractales = [f for f in fractals_en_zona if f >= idx_muerte and f > p1_idx]
             if siguientes_fractales:
@@ -438,7 +524,23 @@ def detect_patron_institucional(df, zona_max, zona_min, direction):
         return res
 
     if numero_engano > 3:
-         return {"estado": "ZONA_AGOTADA", "mensaje": "Se rompieron 3 engaños. La zona ya no es válida para un 4to engaño (Descartada)."}
+        # Secc 15: un 4º engaño es inviable porque "obligaría al precio a salirse de
+        # la Zona de Decisión" — y salirse de la zona ES el contexto del Engaño
+        # Extremo (Secc 17): "la última oportunidad que tiene el mercado para darse
+        # la vuelta en esa zona". Tras el agotamiento, vigilamos ese escape.
+        if nivel_anulacion is not None:
+            HI, LO, zmax, _zmin, r, palabras = _espacio_canonico(df, zona_max, zona_min, direction)
+            anul = nivel_anulacion if direction == "SELL" else -nivel_anulacion
+            desde = ultimo_resultado.get("idx_muerte", ultimo_p1)
+            for j in range(desde, len(df)):
+                if HI[j] > zmax:
+                    detalles = {"nivel_engano": "ENGAÑO EXTREMO (tras zona agotada)",
+                                "pauta1_time": df.loc[j, 'open_time'],
+                                "sugerencia_volumen": "Volumen Normal"}
+                    origen_mov = float(LO[desde:j + 1].min())
+                    return _engano_extremo(df, HI, LO, r, palabras, j, HI[j],
+                                           zmax, anul, origen_mov, detalles)
+        return {"estado": "ZONA_AGOTADA", "mensaje": "Se rompieron 3 engaños. La zona ya no es válida para un 4to engaño (Descartada)."}
 
     return ultimo_resultado
 

@@ -17,8 +17,9 @@ VELAS_ESCANEO = 1500  # ventana máxima de velas de la TF del patrón
 
 # Estados que representan un setup accionable o vivo (para resaltar en el reporte)
 ESTADOS_OPERABLES = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO",
-                     "VALIDADO_POSTERIOR", "ENTRADA_PROFUNDA_ESPERANDO",
-                     "DT_IMPULSO_ESPERANDO", "ENGAÑO_EN_CURSO", "ESPERANDO_1618")
+                     "EE_GATILLO", "EE_ARMADO", "VALIDADO_POSTERIOR",
+                     "ENTRADA_PROFUNDA_ESPERANDO", "DT_IMPULSO_ESPERANDO",
+                     "ENGAÑO_EN_CURSO", "ESPERANDO_1618")
 
 
 def escanear_mapa(cutoff=None, mapa=None, verbose=True):
@@ -57,7 +58,8 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
                 pos = int(df['open_time'].searchsorted(to_cot(pd.Timestamp(desde_op))))
                 df_z = df.iloc[max(0, pos - 2):].reset_index(drop=True)
             zmax, zmin = max(zona['z']), min(zona['z'])
-            res = detect_patron_institucional(df_z, zmax, zmin, lado)
+            res = detect_patron_institucional(df_z, zmax, zmin, lado,
+                                              nivel_anulacion=zona.get('nivel_anulacion'))
             escaneos.append({'zona': zona['name'], 'rango': (zmax, zmin), 'lado': lado,
                              'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
                              'ancla': zona.get('ancla'),
