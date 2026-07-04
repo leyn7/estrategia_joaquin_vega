@@ -65,14 +65,16 @@ for c in res['ciclos']:
                 lado = "PARTE BAJA" if args.direction == "BULLISH" else "PARTE ALTA"
                 caja = ev['zonas']['BAJA'] if args.direction == "BULLISH" else ev['zonas']['ALTA']
                 estado = (f"TRABAJANDO {lado}: {min(caja):.2f} a {max(caja):.2f} "
-                          f"| muerte del ciclo en {ev['nivel_muerte']:.2f}")
+                          f"| muerte del ciclo en {ev['nivel_muerte']:.2f} "
+                          f"| evolución si toca {ev['evolucion_38_2']:.2f}")
             else:
-                estado = f"EN ZONA DE INDECISIÓN (inoperable) | muerte del ciclo en {ev['nivel_muerte']:.2f}"
+                estado = (f"EN ZONA DE INDECISIÓN (inoperable) | muerte del ciclo en {ev['nivel_muerte']:.2f} "
+                          f"| evolución si toca {ev['evolucion_38_2']:.2f}")
         elif ev['activado']:
             estado = f"ACTIVADO (tocó su 38.2 el {cot(ev['hora_activacion'])})"
         else:
             estado = f"EN ALERTA (se activa al tocar su 38.2 en {ev['nivel_activacion']:.2f})"
-        extra = f" | origen dilatado a {ev['origen_vigente']:.2f}" if ev['dilatado'] else ""
+        extra = f" | EVOLUCIONADO: re-anclado en {ev['origen_vigente']:.2f}" if ev['evolucionado'] else ""
         print(f" [VIVO]   {etiqueta} -> fin {ev['fin_vigente']:.2f}: {estado}{extra}")
 
 print("\n--- MAPA ACTUAL DEL TRAMO (anclas vivas) ---")

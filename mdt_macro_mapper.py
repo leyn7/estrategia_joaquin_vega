@@ -210,8 +210,8 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
 
     z = ev['zonas']
     detalle = f"fin {ev['fin_vigente']:.2f}"
-    if ev['dilatado']:
-        detalle += f" | origen dilatado a {ev['origen_vigente']:.2f} (re-medido)"
+    if ev['evolucionado']:
+        detalle += f" | EVOLUCIONADO: re-anclado en {ev['origen_vigente']:.2f} (ciclo mayor)"
     if ev['en_excursion']:
         if ev.get('zona_origen_en_trabajo'):
             # Sección 4/8: el primer 19.1% más allá del origen es la zona del origen
@@ -228,10 +228,12 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
                 lado = "PARTE ALTA (Ventas)"
             if verbose:
                 print(f"{etiqueta} -> {detalle} | TRABAJANDO {lado}: {min(caja):.2f} a {max(caja):.2f} "
-                      f"| muerte del ciclo en {ev['nivel_muerte']:.2f}")
+                      f"| muerte del ciclo en {ev['nivel_muerte']:.2f} "
+                      f"| evolución a ciclo mayor si toca {ev['evolucion_38_2']:.2f}")
         elif verbose:
             print(f"{etiqueta} -> {detalle} | EN ZONA DE INDECISIÓN (superó el 19.1% del origen): "
-                  f"inoperable | muerte del ciclo en {ev['nivel_muerte']:.2f}")
+                  f"inoperable | muerte del ciclo en {ev['nivel_muerte']:.2f} "
+                  f"| evolución a ciclo mayor si toca {ev['evolucion_38_2']:.2f}")
         return
     if not ev['activado']:
         tipo = "COMPRAS" if direction == "BULLISH" else "VENTAS"

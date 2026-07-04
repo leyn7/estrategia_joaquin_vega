@@ -16,24 +16,26 @@ def calc_zones(origen, fin, direction="BULLISH"):
 def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
     """Seguimiento CRONOLÓGICO de un ciclo desde su nacimiento (reglas usuario 3 jul 2026).
 
-    El fibo vigente evoluciona vela a vela: el fin es el extremo corrido desde el ancla.
-      - Muerte del ciclo: el precio toca la extensión 138.2 del fibo VIGENTE en ese
-        instante (origen_v -/+ 0.382*impulso). La muerte es DEFINITIVA aunque después
-        haya nuevos extremos (caso 561.93: murió el 2 jul con extremo 567.77; el nuevo
-        máximo 568.33 del 3 jul no lo revive).
-      - Excursión más allá del origen sin tocar la muerte: el ciclo sigue vivo. El
-        primer 19.1% del impulso más allá del origen ES la zona del origen (Parte
-        Alta en bajista / Parte Baja en alcista, Sección 4): zona OPERATIVA en
-        trabajo, que además borra las zonas internas (Sección 8). Entre el 19.1% y
-        el 38.2% está la Zona de Indecisión (inoperable, Sección 17). Al tocar el
-        38.2 más allá del origen, el ciclo muere. Cuando el precio regresa por
-        completo dentro del impulso, el origen se DILATA al extremo de la excursión
-        y las zonas se RE-MIDEN. La activación se re-arma: exige tocar nuevamente
-        el 38.2 del fibo re-medido (desde abajo).
-      - Activación: tocar el 38.2 del fibo vigente. Un nuevo extremo re-dibuja el fibo
-        y exige tocar el nuevo 38.2 (el ciclo vuelve a alerta).
-      - Zona media: muere si el precio toca el 100% (origen vigente); una re-medición
-        la restaura fresca.
+    El origen del fibo es FIJO (la dilatación del origen NO existe en el curso —
+    zombis del 3 jul 2026). El fin sí se extiende con nuevos extremos del impulso.
+      - Muerte del ciclo: el precio toca la extensión 138.2/-38.2 del fibo
+        (origen ± 0.382*impulso). DEFINITIVA (caso 561.93; caso zombi 548.59:
+        murió el 30 jun al tocar 552.90, no persigue al precio).
+      - Excursión más allá del origen sin tocar la muerte: el primer 19.1% del
+        impulso más allá del origen ES la zona del origen (Parte Alta en bajista /
+        Parte Baja en alcista, Sección 4): zona OPERATIVA en trabajo, que además
+        borra las zonas internas (Sección 8). Entre el 19.1% y el 38.2% está la
+        Zona de Indecisión (Sección 17). Al tocar el 38.2 más allá, muere.
+      - EVOLUCIÓN A CICLO MAYOR (Sección 8, video ZONA ALTA): el extremo de la
+        excursión es el nuevo origen de una medida mayor (extremo -> fin). Si el
+        precio se aleja del extremo el 38.2% de esa nueva medida, el ciclo viejo
+        muere y el mayor toma su lugar: re-ancla en el extremo, zonas nuevas,
+        ACTIVADO ("el ciclo azul se muere y pasamos a tener un ciclo mayor").
+      - Activación: tocar el 38.2 del fibo vigente. Un nuevo extremo del impulso
+        re-dibuja el fibo y exige tocar el nuevo 38.2 (misma evolución, mismo
+        ancla: "movimiento mayor desde ese origen").
+      - Zona media: muere si el precio toca el 100% (origen); la evolución la
+        restaura fresca.
 
     df debe empezar en (o antes de) el ancla del ciclo; desde_idx = vela del ancla.
     La dirección BEARISH se procesa reflejando precios. Devuelve dict con estado.
@@ -50,7 +52,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
     exc_min = None
     activado = False
     hora_act = None
-    dilatado = False
+    evolucionado = False
     media_muerta = False
 
     for i in range(int(desde_idx) + 1, len(df)):
@@ -68,26 +70,30 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
                         'activado': False, 'zonas': None}
 
             if exc_min is not None:
-                # Excursión abierta más allá del origen (zona baja dilatándose)
+                # Excursión abierta más allá del origen. El origen NO se mueve:
+                # el ciclo muere en su 38.2 fijo (chequeo de arriba) o EVOLUCIONA.
                 if lo < exc_min:
                     exc_min = lo
-                if lo >= origen_v:
-                    # El precio regresó por completo: re-medición con el origen dilatado
+                # Evolución (Secc 8): el precio se alejó del extremo de la excursión
+                # el 38.2% de la medida mayor (extremo -> fin): el ciclo viejo muere
+                # y el mayor toma su lugar, re-anclado en el extremo y ACTIVADO.
+                act_evo = exc_min + (fin_v - exc_min) * 0.382
+                if hi >= act_evo:
                     origen_v = exc_min
                     exc_min = None
-                    dilatado = True
-                    activado = False
-                    hora_act = None
+                    evolucionado = True
+                    activado = True
+                    hora_act = times[i]
                     media_muerta = False
                 continue
 
             if lo < origen_v:
                 exc_min = lo
-                media_muerta = True  # tocó el 100% al salir (la re-medición la restaura)
+                media_muerta = True  # tocó el 100% al salir (la evolución la restaura)
                 continue
 
             if not activado:
-                if (not dilatado and lo <= act) or (dilatado and hi >= act):
+                if (lo <= act) or (evolucionado and hi >= act):
                     activado = True
                     hora_act = times[i]
             elif lo <= origen_v:
@@ -95,7 +101,8 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
 
         if hi > fin_v:
             if fin_v > origen_v:
-                # Nuevo extremo: el fibo se re-dibuja y exige tocar el nuevo 38.2
+                # Nuevo extremo del impulso: el fibo se re-dibuja (misma ancla,
+                # medida mayor) y exige tocar el nuevo 38.2
                 activado = False
                 hora_act = None
                 media_muerta = False
@@ -107,7 +114,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
 
     zonas = calc_zones(m * origen_v, m * fin_v, direction)
     res = {'estado': 'VIVO', 'activado': activado, 'hora_activacion': hora_act,
-           'dilatado': dilatado, 'en_excursion': exc_min is not None,
+           'evolucionado': evolucionado, 'en_excursion': exc_min is not None,
            'media_muerta': media_muerta, 'origen_vigente': m * origen_v,
            'fin_vigente': m * fin_v, 'zonas': zonas,
            'nivel_activacion': zonas['activacion']}
@@ -122,6 +129,8 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
         res['limite_zona_origen'] = m * limite_zona
         res['nivel_muerte'] = m * (origen_v - impulso * 0.382)
         res['extremo_excursion'] = m * exc_min
+        # Fibo de alerta de la evolución (Secc 8): medida mayor extremo -> fin
+        res['evolucion_38_2'] = m * (exc_min + (fin_v - exc_min) * 0.382)
     return res
 
 
