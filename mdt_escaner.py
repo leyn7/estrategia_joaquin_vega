@@ -9,7 +9,7 @@ vivo debe re-validar con ancla_viva(mapa_fresco, ancla) antes de armar o
 disparar cualquier entrada (candado mapa->escáner).
 """
 import pandas as pd
-from mdt_config import TF_PATRON, TF_MINUTOS, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
+from mdt_config import SYMBOL, TF_PATRON, TF_MINUTOS, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
 from mdt_macro_mapper import generar_mapa, _descargar, _ahora, ancla_viva
 
@@ -40,9 +40,9 @@ def direccion_prioritaria(mapa):
 
 def _operacion(escaneo, prioritaria):
     """Construye las 4 Informaciones (Secc 7) de una señal accionable:
-    entrada, SL estructural, TP (zona contraria / 61.8 de alerta), ratio 1:4
-    (Secc 1, al borde cercano de la zona objetivo — conservador) y la etiqueta
-    Prioritario/Secundario con su volumen."""
+    entrada, SL estructural, TP (zona contraria / 61.8 de alerta), ratio mínimo
+    1:3 (Secc 1, al borde cercano de la zona objetivo — conservador) y la
+    etiqueta Prioritario/Secundario con su volumen."""
     res = escaneo['resultado']
     d = res.get('detalles', {})
     lado = escaneo['lado']
@@ -70,7 +70,7 @@ def _operacion(escaneo, prioritaria):
             "volumen": "Normal" if prioritario else "Reducido (Movimiento Secundario, Secc 1)"}
 
 
-def escanear_mapa(cutoff=None, mapa=None, verbose=True):
+def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     """Genera (o recibe) el mapa y escanea patrones en cada zona operativa final.
 
     Devuelve {'mapa': ..., 'escaneos': [{zona, rango, lado, tf_ciclo, tf_patron,
@@ -80,7 +80,7 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
     from mdt_patrones import detect_patron_institucional
 
     if mapa is None:
-        mapa = generar_mapa(cutoff, verbose=False)
+        mapa = generar_mapa(cutoff, verbose=False, symbol=symbol)
 
     limite = cutoff if cutoff is not None else _ahora()
     cache_df = {}
@@ -92,7 +92,7 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
             tf_patron = TF_PATRON.get(zona['tf'], zona['tf'])
             if tf_patron not in cache_df:
                 desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * TF_MINUTOS[tf_patron])
-                df = _descargar(tf_patron, desde, cutoff)
+                df = _descargar(tf_patron, desde, cutoff, symbol)
                 df['open_time'] = to_cot(df['open_time'])
                 cache_df[tf_patron] = df
             df = cache_df[tf_patron]
@@ -140,7 +140,7 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
             print(f"      {res['estado']}: {res['mensaje']}{hora_txt}{marca}")
             op = e.get('operacion')
             if op:
-                veredicto = ("CUMPLE 1:4" if op['cumple_ratio']
+                veredicto = (f"CUMPLE 1:{RATIO_MINIMO:.0f}" if op['cumple_ratio']
                              else f"NO CUMPLE 1:{RATIO_MINIMO:.0f} -> NO OPERAR (Secc 1)")
                 print(f"      OPERACIÓN: entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
                       f"(riesgo {op['riesgo']:.2f}) | TP zona {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f} "
@@ -151,13 +151,25 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True):
             'prioritaria': prioritaria, 'zona_que_manda': zona_que_manda}
 
 
-def revalidar_setup(escaneo, cutoff=None):
+def revalidar_setup(escaneo, cutoff=None, symbol=SYMBOL):
     """Candado mapa->escáner (Regla 3): ¿el ancla del setup sigue viva en un mapa
     fresco? Si el ancla fue enterrada (desgrane) o murió (138.2/evolución), el
     setup debe cancelarse aunque el patrón siga dibujado."""
-    mapa = generar_mapa(cutoff, verbose=False)
+    mapa = generar_mapa(cutoff, verbose=False, symbol=symbol)
     return ancla_viva(mapa, escaneo['ancla'])
 
 
 if __name__ == "__main__":
-    escanear_mapa()
+    # Punto de entrada del ANÁLISIS COMPLETO: mapa (estructura macro + ciclos +
+    # concurrencia) y escáner de patrones con las 4 Informaciones por señal.
+    #   python mdt_escaner.py                          -> BNBUSDT, ahora
+    #   python mdt_escaner.py --symbol ETHUSDT         -> otra moneda
+    #   python mdt_escaner.py --cutoff "2026-07-01 04:21"  (UTC, time-travel)
+    import argparse
+    ap = argparse.ArgumentParser(description="Análisis MDT completo de un símbolo")
+    ap.add_argument("--symbol", default=SYMBOL, help="símbolo de futuros USDT-M (ej. ETHUSDT)")
+    ap.add_argument("--cutoff", default=None, help="instante UTC para time-travel (default: ahora)")
+    args = ap.parse_args()
+    _cutoff = pd.Timestamp(args.cutoff) if args.cutoff else None
+    _mapa = generar_mapa(_cutoff, verbose=True, symbol=args.symbol.upper())
+    escanear_mapa(_cutoff, mapa=_mapa, verbose=True, symbol=args.symbol.upper())

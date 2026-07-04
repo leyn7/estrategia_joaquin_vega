@@ -49,39 +49,36 @@ _cache = {}
 _descarga_original = mdt_data.get_binance_klines
 
 
-def _cache_path(interval):
-    return os.path.join(CACHE_DIR, f"{SYMBOL}_{interval}.pkl")
+def _cache_path(symbol, interval):
+    return os.path.join(CACHE_DIR, f"{symbol}_{interval}.pkl")
 
 
-def _cargar_cache(interval):
-    if interval in _cache:
-        return _cache[interval]
-    p = _cache_path(interval)
+def _cargar_cache(symbol, interval):
+    clave = (symbol, interval)
+    if clave in _cache:
+        return _cache[clave]
+    p = _cache_path(symbol, interval)
     if os.path.exists(p):
         with open(p, 'rb') as f:
-            _cache[interval] = pickle.load(f)
-        return _cache[interval]
+            _cache[clave] = pickle.load(f)
+        return _cache[clave]
     return None
 
 
-def _guardar_cache(interval, df):
+def _guardar_cache(symbol, interval, df):
     os.makedirs(CACHE_DIR, exist_ok=True)
-    _cache[interval] = df
-    with open(_cache_path(interval), 'wb') as f:
+    _cache[(symbol, interval)] = df
+    with open(_cache_path(symbol, interval), 'wb') as f:
         pickle.dump(df, f)
 
 
 def get_klines_cacheado(symbol=SYMBOL, interval="1d", start_time=None):
-    if symbol != SYMBOL:
-        return _descarga_original(symbol, interval, start_time)
-    df = _cargar_cache(interval)
+    df = _cargar_cache(symbol, interval)
     inicio = pd.Timestamp(start_time).tz_localize(None) if start_time is not None and getattr(start_time, 'tzinfo', None) is None \
         else (pd.Timestamp(start_time).tz_convert('UTC').tz_localize(None) if start_time is not None else None)
-    necesita = (df is None or (inicio is not None and df['open_time'].iloc[0] > inicio)
-                or df is None)
     if df is None or (inicio is not None and df['open_time'].iloc[0] > inicio):
         df = _descarga_original(symbol, interval, start_time)
-        _guardar_cache(interval, df)
+        _guardar_cache(symbol, interval, df)
     if inicio is not None:
         return df[df['open_time'] >= inicio].reset_index(drop=True)
     return df.copy()
@@ -221,18 +218,20 @@ def main():
     ap.add_argument("--desde", default="2026-06-08")
     ap.add_argument("--hasta", default="2026-07-04")
     ap.add_argument("--paso-horas", type=int, default=24)
+    ap.add_argument("--symbol", default=SYMBOL)
     args = ap.parse_args()
+    symbol = args.symbol.upper()
 
     cortes = pd.date_range(args.desde, args.hasta, freq=f"{args.paso_horas}h")
     paso = pd.Timedelta(hours=args.paso_horas)
-    print(f"Walk-forward {args.desde} -> {args.hasta} | {len(cortes)} cortes cada {args.paso_horas}h\n")
+    print(f"Walk-forward {symbol} {args.desde} -> {args.hasta} | {len(cortes)} cortes cada {args.paso_horas}h\n")
 
     trades = {}
     df_sim_cache = {}
     for n, cutoff in enumerate(cortes, 1):
         cutoff = pd.Timestamp(cutoff)
         try:
-            resultado = escanear_mapa(cutoff=cutoff, verbose=False)
+            resultado = escanear_mapa(cutoff=cutoff, verbose=False, symbol=symbol)
         except Exception as exc:
             print(f"[{n}/{len(cortes)}] {cutoff} ERROR: {exc}")
             continue
@@ -258,7 +257,7 @@ def main():
                     continue
                 tf_p = e['tf_patron']
                 if tf_p not in df_sim_cache:
-                    df_sim_cache[tf_p] = get_klines_cacheado(SYMBOL, tf_p,
+                    df_sim_cache[tf_p] = get_klines_cacheado(symbol, tf_p,
                                                              pd.Timestamp(args.desde) - pd.Timedelta(days=2))
                 sim = simular(t, lado, tp_nivel, df_sim_cache[tf_p], e['tf_ciclo'])
                 if sim is None:

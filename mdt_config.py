@@ -6,13 +6,19 @@ Los NÚMEROS DE LA BIBLIA (fibo) también viven aquí con nombre: no son ajustab
 """
 
 # --- Mercado ---
-SYMBOL = "BNBUSDT"           # futuros USDT-M de Binance (feed fapi: último trade)
+SYMBOL = "BNBUSDT"           # símbolo por defecto; todo el pipeline acepta --symbol
 TZ_LOCAL = "America/Bogota"  # zona horaria del operador (COT)
 
 # --- Análisis de muñecas rusas (Sección 2): origen del ciclo macro alcista ---
-# Mínimo de junio 2022 en ~183 USDT. Se localiza la ÚLTIMA vela diaria cuyo low
-# cae en la banda. Si se cambia de símbolo, este análisis debe rehacerse a mano.
-ORIGEN_MACRO_BANDA = (182.0, 183.5)
+# El mapa lo deriva AUTOMÁTICAMENTE del diario (derivar_estructura_macro): cada
+# retroceso que supera el 61.8% del impulso corrido SELLA el fractal y re-funda
+# el origen en el fondo de ese retroceso; el origen macro es la re-fundación con
+# el impulso más grande hasta el ATH ("el impulso mayor absoluto del gráfico").
+# Para BNBUSDT reproduce el análisis manual validado (182.97 @ 2022-06-18).
+# La biblia dice que CUALQUIER muñeca es un origen 100% correcto (elección del
+# operador): si se prefiere otra, fijar aquí una banda (low_min, low_max) del
+# low diario por símbolo — la banda manual manda sobre la derivación.
+ORIGENES_MACRO_MANUAL = {}   # ej.: {"BNBUSDT": (182.0, 183.5)}
 
 # --- Cascada de temporalidades del mapa (Regla 1: siempre termina en 1m) ---
 TF_LADDER = ["1d", "2h", "30m", "3m", "1m"]

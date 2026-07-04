@@ -18,9 +18,10 @@ parser.add_argument("--start", required=True, help="Hora Bogotá del inicio del 
 parser.add_argument("--extremo", default=None, help="Hora Bogotá de la vela del extremo del tramo")
 parser.add_argument("--cutoff", default=None, help="Hora Bogotá: ignora todo lo posterior")
 parser.add_argument("--direction", default="BULLISH", choices=["BULLISH", "BEARISH"])
-args = parser.parse_args()
-
 from mdt_config import SYMBOL, TZ_LOCAL as BOG
+parser.add_argument("--symbol", default=SYMBOL)
+args = parser.parse_args()
+args.symbol = args.symbol.upper()
 
 def a_utc(s):
     return pd.Timestamp(s, tz=BOG).tz_convert('UTC').tz_localize(None)
@@ -32,7 +33,8 @@ inicio = a_utc(args.start)
 fin_limite = a_utc(args.extremo) + pd.Timedelta(minutes=15) if args.extremo else None
 cutoff = a_utc(args.cutoff) if args.cutoff else None
 
-res = analizar_tramo("Tramo", inicio, fin_limite, args.direction, cutoff, verbose=True)
+res = analizar_tramo("Tramo", inicio, fin_limite, args.direction, cutoff, verbose=True,
+                     symbol=args.symbol)
 if res is None:
     raise SystemExit("Tramo sin datos suficientes.")
 
@@ -103,7 +105,7 @@ if res.get('pendientes'):
 # candidato dominante a próximo punto de control (dilata mientras deje nuevos extremos)
 from mdt_data import get_binance_klines
 
-df_post = get_binance_klines(SYMBOL, res['tf_macro'],
+df_post = get_binance_klines(args.symbol, res['tf_macro'],
                              start_time=pd.Timestamp(res['origen_time']).tz_localize('UTC'))
 if cutoff is not None:
     df_post = df_post[df_post['open_time'] <= cutoff].reset_index(drop=True)

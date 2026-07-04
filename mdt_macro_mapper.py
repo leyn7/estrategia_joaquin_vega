@@ -17,20 +17,103 @@ from mdt_data import get_binance_klines
 from mdt_math import calc_zones, evaluar_ciclo, apply_concurrency, format_z
 from mdt_fractal import extraer_puntos_control
 
-from mdt_config import (SYMBOL, ORIGEN_MACRO_BANDA, TF_LADDER, TF_MINUTOS,
-                        MIN_VELAS_TF, MAX_VELAS_DESCARGA, GRADO_MIN_OPERABLE_PCT)
+from mdt_config import (SYMBOL, ORIGENES_MACRO_MANUAL, TF_LADDER, TF_MINUTOS,
+                        MIN_VELAS_TF, MAX_VELAS_DESCARGA, GRADO_MIN_OPERABLE_PCT,
+                        NIVEL_382, NIVEL_618)
 
 
 def _ahora():
     return pd.Timestamp.now(tz='UTC').tz_localize(None)
 
 
-def _descargar(tf, desde=None, cutoff=None):
+def _descargar(tf, desde=None, cutoff=None, symbol=SYMBOL):
     start = pd.Timestamp(desde).tz_localize('UTC') if desde is not None else None
-    df = get_binance_klines(SYMBOL, tf, start_time=start)
+    df = get_binance_klines(symbol, tf, start_time=start)
     if cutoff is not None:
         df = df[df['open_time'] <= cutoff]
     return df.reset_index(drop=True)
+
+
+def _origen_por_munecas(df_1d, ath_idx):
+    """Muñecas rusas mecánicas (Secc 2) sobre el diario, acotadas al ATH.
+
+    Cada vez que un retroceso supera el 61.8% del impulso corrido (origen ->
+    máximo alcanzado), el fractal queda SELLADO y el mercado se re-funda en el
+    fondo completo de ese retroceso ("el retroceso del fractal 1 se convierte
+    en el impulso del fractal 2"). Solo cuentan como muñecas los sellos de
+    ESCALA MACRO (impulso sellado >= 38.2% del impulso total del gráfico): un
+    fractal minúsculo de la infancia del activo no es estructura mensual (caso
+    ETHUSDT: un sello de 50 puntos a 3 días del listado NO re-funda el mapa).
+    El origen macro elegido es la re-fundación macro cuyo impulso hasta el ATH
+    es el mayor — "el impulso mayor absoluto del gráfico". Sin re-fundaciones
+    macro (moneda joven en tendencia): el mínimo global.
+    """
+    lows, highs = df_1d['low'].values, df_1d['high'].values
+    min_global = int(df_1d.loc[:ath_idx, 'low'].idxmin())
+    imp_total = highs[ath_idx] - lows[min_global]
+    o = min_global
+    candidatos = []  # re-fundaciones nacidas de sellos de escala macro
+    while True:
+        p_val = lows[o]
+        sello = None
+        for i in range(o + 1, ath_idx + 1):
+            if highs[i] > p_val:
+                p_val = highs[i]
+            if p_val > lows[o] and (p_val - lows[i]) / (p_val - lows[o]) > NIVEL_618:
+                sello = i
+                break
+        if sello is None:
+            break
+        imp_sellado = p_val - lows[o]
+        # fondo del retroceso: el mínimo hasta que el precio supere el extremo sellado
+        fin_retro = ath_idx
+        for j in range(sello, ath_idx + 1):
+            if highs[j] > p_val:
+                fin_retro = j
+                break
+        o = sello + int(lows[sello:fin_retro + 1].argmin())
+        if imp_sellado >= NIVEL_382 * imp_total:
+            candidatos.append((o, highs[ath_idx] - lows[o]))
+    if candidatos:
+        return max(candidatos, key=lambda c: c[1])[0]
+    return min_global
+
+
+def derivar_estructura_macro(df_1d, symbol=SYMBOL, verbose=True):
+    """Deriva la estructura macro del gráfico (Secc 2): origen alcista, ATH y fondo.
+
+    ATH = máximo absoluto del histórico disponible. Origen del macro alcista:
+    banda manual del operador si existe (ORIGENES_MACRO_MANUAL — la biblia deja
+    la elección de la muñeca al operador), o la derivación automática de
+    _origen_por_munecas. Fondo = mínimo absoluto posterior al ATH (el retroceso
+    del fractal vigente, que a su vez es el impulso del siguiente).
+    """
+    ath_idx = int(df_1d['high'].idxmax())
+    fondo_idx = int(df_1d.loc[ath_idx:, 'low'].idxmin()) if ath_idx < len(df_1d) - 1 else None
+
+    banda = ORIGENES_MACRO_MANUAL.get(symbol)
+    if banda is not None:
+        en_banda = df_1d[(df_1d['low'] > banda[0]) & (df_1d['low'] < banda[1])]
+        if en_banda.empty:
+            raise RuntimeError(f"No hay velas diarias de {symbol} con low en la banda manual {banda}. "
+                               "Revisar ORIGENES_MACRO_MANUAL o dejar la derivación automática.")
+        origen_idx = int(en_banda.index[-1])
+        modo = f"manual (banda {banda})"
+    elif ath_idx > 0:
+        origen_idx = _origen_por_munecas(df_1d, ath_idx)
+        modo = "auto (muñecas rusas Secc 2)"
+    else:
+        origen_idx, modo = None, "sin tramo alcista (ATH al inicio del histórico)"
+
+    if verbose:
+        o_txt = (f"{df_1d.loc[origen_idx, 'low']:.2f} @ {df_1d.loc[origen_idx, 'open_time'].date()}"
+                 if origen_idx is not None else "—")
+        f_txt = (f"{df_1d.loc[fondo_idx, 'low']:.2f} @ {df_1d.loc[fondo_idx, 'open_time'].date()}"
+                 if fondo_idx is not None else "—")
+        print(f"ESTRUCTURA MACRO {symbol}: origen {o_txt} [{modo}] | "
+              f"ATH {df_1d.loc[ath_idx, 'high']:.2f} @ {df_1d.loc[ath_idx, 'open_time'].date()} | "
+              f"fondo post-ATH {f_txt}")
+    return {'origen_idx': origen_idx, 'ath_idx': ath_idx, 'fondo_idx': fondo_idx}
 
 
 def _tf_para_span(span_min):
@@ -41,7 +124,7 @@ def _tf_para_span(span_min):
     return TF_LADDER[0]
 
 
-def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True):
+def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True, symbol=SYMBOL):
     """Cascada de extracción cronológica sobre un tramo (Regla 1).
 
     Cada TF más fina re-escanea TODO el tramo (o hasta donde alcance su presupuesto
@@ -72,7 +155,7 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True)
             desde = limite - pd.Timedelta(minutes=MAX_VELAS_DESCARGA * TF_MINUTOS[tf])
             if verbose:
                 print(f"   [!] {tf}: tramo más largo que el presupuesto; se cubre desde {desde}")
-        df_tf = _descargar(tf, desde, cutoff)
+        df_tf = _descargar(tf, desde, cutoff, symbol)
         if fin_limite is not None:
             df_tf = df_tf[df_tf['open_time'] < pd.Timestamp(fin_limite)].reset_index(drop=True)
         if len(df_tf) < 6:
@@ -145,11 +228,11 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True)
             'extremo': extremo_val, 'tf_macro': tf_macro}
 
 
-def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=True):
+def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=True, symbol=SYMBOL):
     """Extrae los puntos de control del tramo (Regla 1) y sigue cada ciclo vela a vela
     hasta el cutoff/presente (Regla 2). Devuelve los ciclos con su estado — la fuente
     única de anclas para el escáner (Regla 3)."""
-    ext = extraer_mapa_tramo(inicio, fin_limite, direction, cutoff, verbose)
+    ext = extraer_mapa_tramo(inicio, fin_limite, direction, cutoff, verbose, symbol)
     if ext['origen'] is None:
         return None
 
@@ -173,7 +256,7 @@ def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=T
     t_ref = None
     for tf_eval, lista in por_tf.items():
         desde = min(c['ancla_time'] for c in lista)
-        df_eval = _descargar(tf_eval, desde, cutoff)
+        df_eval = _descargar(tf_eval, desde, cutoff, symbol)
         if len(df_eval) and (t_ref is None or df_eval['open_time'].iloc[-1] > t_ref):
             t_ref = df_eval['open_time'].iloc[-1]
             precio_ref = float(df_eval['close'].iloc[-1])
@@ -329,42 +412,46 @@ def resolver_concurrencia(zonas, buy_or_sell, current_price=None, verbose=True):
     return finales
 
 
-def generar_mapa(cutoff=None, verbose=True):
+def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
     """Reconstruye el mapa completo en el instante `cutoff` (Regla 2; None = ahora).
 
     Devuelve {'ciclos', 'buys', 'sells', 'alerts', 'precio'}: los ciclos traen estado
     (VIVO/MUERTO, activación, dilatación) — Regla 3: el escáner opera SOLO anclas de
     ciclos VIVOS de esta estructura.
+
+    Las rutas salen de la estructura macro derivada del diario (Secc 2): el
+    impulso mayor hasta el ATH (alcista), su retroceso (bajista) y el retroceso
+    de ese retroceso (post-fondo) — las tres muñecas vigentes. Los tramos que no
+    existen en el gráfico (moneda en su ATH, ATH al inicio del histórico) se
+    omiten solos.
     """
     if verbose:
         print("\n" + "=" * 70)
-        print(" MOTOR ESTRUCTURAL UNIVERSAL MDT (MAPA CRONOLÓGICO, CASCADA A 1M)")
+        print(f" MOTOR ESTRUCTURAL UNIVERSAL MDT — {symbol} (MAPA CRONOLÓGICO, CASCADA A 1M)")
         print("=" * 70 + "\n")
 
-    df_1d = _descargar("1d", None, cutoff)
+    df_1d = _descargar("1d", None, cutoff, symbol)
+    if len(df_1d) < 2:
+        raise RuntimeError(f"Sin histórico diario suficiente para {symbol}.")
 
-    en_banda = df_1d[(df_1d['low'] > ORIGEN_MACRO_BANDA[0]) & (df_1d['low'] < ORIGEN_MACRO_BANDA[1])]
-    if en_banda.empty:
-        raise RuntimeError(f"No se encontró el origen macro alcista de {SYMBOL} en la banda {ORIGEN_MACRO_BANDA}. "
-                           "Revisar ORIGEN_MACRO_BANDA (análisis de muñecas rusas).")
-    start_bull_idx = int(en_banda.index[-1])
-    ath_idx = int(df_1d['high'].idxmax())
-    bottom_idx = int(df_1d.loc[ath_idx:, 'low'].idxmin())
+    est = derivar_estructura_macro(df_1d, symbol, verbose)
+    ath_idx, origen_idx, fondo_idx = est['ath_idx'], est['origen_idx'], est['fondo_idx']
 
     un_dia = pd.Timedelta(days=1)
-    rutas = [
-        ("Alcista", df_1d.loc[start_bull_idx, 'open_time'], df_1d.loc[ath_idx, 'open_time'] + un_dia,
-         "BULLISH", 100),
-        ("Bajista", df_1d.loc[ath_idx, 'open_time'], df_1d.loc[bottom_idx, 'open_time'] + un_dia,
-         "BEARISH", 100),
-        ("Alcista Post-F", df_1d.loc[bottom_idx, 'open_time'], None, "BULLISH", 96),
-    ]
+    rutas = []
+    if origen_idx is not None and ath_idx > origen_idx:
+        rutas.append(("Alcista", df_1d.loc[origen_idx, 'open_time'],
+                      df_1d.loc[ath_idx, 'open_time'] + un_dia, "BULLISH", 100))
+    if fondo_idx is not None and fondo_idx > ath_idx:
+        rutas.append(("Bajista", df_1d.loc[ath_idx, 'open_time'],
+                      df_1d.loc[fondo_idx, 'open_time'] + un_dia, "BEARISH", 100))
+        rutas.append(("Alcista Post-F", df_1d.loc[fondo_idx, 'open_time'], None, "BULLISH", 96))
 
     buys, sells, alerts, ciclos_todos = [], [], [], []
     for nombre, ini, fin, direction, peso_base in rutas:
         if verbose:
             print(f"\n--- RUTA {nombre.upper()} ({direction}) ---")
-        res = analizar_tramo(nombre, ini, fin, direction, cutoff, verbose)
+        res = analizar_tramo(nombre, ini, fin, direction, cutoff, verbose, symbol)
         if res is None:
             continue
         for j, c in enumerate(res['ciclos']):
@@ -410,4 +497,10 @@ def ancla_viva(mapa, ancla, tol=1e-6):
 
 
 if __name__ == "__main__":
-    generar_mapa()
+    import argparse
+    _ap = argparse.ArgumentParser()
+    _ap.add_argument("--symbol", default=SYMBOL)
+    # parse_known_args: _backtest_mapper.py re-ejecuta este __main__ con su propio
+    # argv posicional (el cutoff) — se ignora aquí sin romper la compatibilidad
+    _args, _ = _ap.parse_known_args()
+    generar_mapa(symbol=_args.symbol.upper())
