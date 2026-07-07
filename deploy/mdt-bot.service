@@ -1,0 +1,18 @@
+[Unit]
+Description=Bot MDT (estrategia Joaquin Vega) — mapa + escaner + alertas Telegram
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bot
+WorkingDirectory=/opt/mdt_bot
+EnvironmentFile=-/opt/mdt_bot/.env
+ExecStart=/opt/mdt_bot/venv/bin/python mdt_vivo.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/opt/mdt_bot/logs/bot.log
+StandardError=append:/opt/mdt_bot/logs/bot.log
+
+[Install]
+WantedBy=multi-user.target
