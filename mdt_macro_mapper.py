@@ -143,7 +143,7 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True,
     pendientes_por_trough = {}
     inicio_tramo = pd.Timestamp(inicio)
     limite = pd.Timestamp(fin_limite) if fin_limite is not None else (cutoff or _ahora())
-    origen_val = origen_time = extremo_val = tf_macro = None
+    origen_val = origen_time = extremo_val = extremo_time = tf_macro = None
 
     for tf in TF_LADDER:
         span_min = max((limite - inicio_tramo).total_seconds() / 60.0, 0)
@@ -174,6 +174,7 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True,
             origen_val = float(df_tf.loc[o_idx, 'low' if bull else 'high'])
             origen_time = df_tf.loc[o_idx, 'open_time']
         extremo_val = float(df_tf.loc[e_idx, 'high' if bull else 'low'])
+        extremo_time = df_tf.loc[e_idx, 'open_time']
 
         if verbose:
             print(f"   >>> [{tf}] extracción desde {df_tf.loc[o_idx, 'open_time']} "
@@ -225,7 +226,7 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True,
                         key=lambda p: p['altura'], reverse=True)
     return {'cps': mapa, 'cronologia': cronologia, 'pendientes': pendientes,
             'origen': origen_val, 'origen_time': origen_time,
-            'extremo': extremo_val, 'tf_macro': tf_macro}
+            'extremo': extremo_val, 'extremo_time': extremo_time, 'tf_macro': tf_macro}
 
 
 def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=True, symbol=SYMBOL):
@@ -448,6 +449,7 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
         rutas.append(("Alcista Post-F", df_1d.loc[fondo_idx, 'open_time'], None, "BULLISH", 96))
 
     buys, sells, alerts, ciclos_todos = [], [], [], []
+    res_prev = fin_prev = dir_prev = peso_prev = None
     for nombre, ini, fin, direction, peso_base in rutas:
         if verbose:
             print(f"\n--- RUTA {nombre.upper()} ({direction}) ---")
@@ -460,6 +462,43 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
             c['direction'] = direction
             ciclos_todos.append(c)
             _registrar_ciclo(c, direction, buys, sells, alerts, verbose)
+        res_prev, fin_prev, dir_prev, peso_prev = res, fin, direction, peso_base
+
+    # --- Muñecas anidadas (Secc 2, regla usuario 6 jul 2026) ---
+    # "El retroceso de este gran fractal 1 se convierte automáticamente en el
+    # impulso del fractal 2": el desgrane no termina en las 3 muñecas del diario.
+    # El retroceso corrido del impulso de la última ruta abierta es la siguiente
+    # muñeca (ej. el retroceso del rebote post-fondo = ciclo bajista desde su
+    # tope). Los ciclos pequeños, si hacen lo que se espera en sus zonas, también
+    # son operables — el corte es la escala mínima operable (grado >= 1% del
+    # precio, misma regla de la capa operativa).
+    n_muneca = len(rutas) + 1
+    while (res_prev is not None and fin_prev is None and n_muneca <= 8
+           and res_prev.get('extremo_time') is not None):
+        direction = "BEARISH" if dir_prev == "BULLISH" else "BULLISH"
+        nombre = f"{'Bajista' if direction == 'BEARISH' else 'Alcista'} M{n_muneca}"
+        peso_base = peso_prev - 4
+        if verbose:
+            print(f"\n--- RUTA {nombre.upper()} ({direction}, muñeca anidada) ---")
+        res = analizar_tramo(nombre, res_prev['extremo_time'], None, direction,
+                             cutoff, verbose, symbol)
+        if res is None or res.get('extremo') is None:
+            break
+        grado_ruta = abs(res['origen'] - res['extremo'])
+        precio_ref = res.get('precio_ref')
+        if precio_ref is None or grado_ruta < precio_ref * GRADO_MIN_OPERABLE_PCT:
+            if verbose:
+                print(f"   (retroceso {grado_ruta:.2f} < {GRADO_MIN_OPERABLE_PCT:.0%} "
+                      f"del precio: fin de las muñecas anidadas)")
+            break
+        for j, c in enumerate(res['ciclos']):
+            c['peso'] = peso_base - j
+            c['ruta'] = nombre
+            c['direction'] = direction
+            ciclos_todos.append(c)
+            _registrar_ciclo(c, direction, buys, sells, alerts, verbose)
+        res_prev, dir_prev, peso_prev = res, direction, peso_base
+        n_muneca += 1
 
     current_price = float(df_1d.iloc[-1]['close'])
 

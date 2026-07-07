@@ -229,6 +229,41 @@ def _engano_extremo(df, HI, LO, r, palabras, idx_escape, extremo_inicial,
             "detalles": detalles}
 
 
+def _vigilar_escape(df, HI, LO, zmax, anulacion, r, palabras, desde, etiqueta, historial):
+    """Vigilancia del límite exterior (Secc 17) cuando la cadena de patrones ya no
+    tiene P1 que evaluar. El EE es "la última oportunidad" de la zona y un escape
+    tímido descartado anuncia "una sacudida más potente después": el escape se
+    sigue vigilando episodio tras episodio (caso real 6 jul 2026: tras un
+    EE_DESCARTADO_25 de 0.03, el escape real a 593.83 era invisible porque el pico
+    del escape queda FUERA de la zona y jamás vuelve a haber P1 dentro).
+
+    Devuelve el último episodio de EE encontrado (o None si nunca hubo escape).
+    """
+    ultimo = None
+    j = desde
+    while j < len(df):
+        if HI[j] > zmax:
+            detalles = {"nivel_engano": etiqueta,
+                        "pauta1_time": df.loc[j, 'open_time'],
+                        "sugerencia_volumen": "Volumen Normal"}
+            origen_mov = float(LO[desde:j + 1].min())
+            res = _engano_extremo(df, HI, LO, r, palabras, j, HI[j],
+                                  zmax, anulacion, origen_mov, detalles)
+            historial.append(res)
+            ultimo = res
+            if res["estado"] == "ROTO_POR_STOP_LOSS":
+                # La vela que saltó el SL sigue escapada: re-medir el episodio ahí
+                j = res["idx_muerte"]
+                continue
+            if res["estado"] == "EE_DESCARTADO_25":
+                # Escape tímido: seguir esperando la sacudida más potente
+                j = res["idx_muerte"] + 1
+                continue
+            return res  # vivo (GATILLO/ARMADO/INDECISION) o ANULADO_POR_ESCAPE
+        j += 1
+    return ultimo
+
+
 def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction, nivel_anulacion=None):
     HI, LO, zmax, zmin, r, palabras = _espacio_canonico(df, zona_max, zona_min, direction)
     anulacion = None
@@ -578,26 +613,23 @@ def detect_patron_institucional(df, zona_max, zona_min, direction, nivel_anulaci
         res["historial"] = historial
         return res
 
+    # La cadena murió sin más P1 (o la zona se agotó con 3 engaños, Secc 15: el 4º
+    # "obligaría al precio a salirse de la Zona de Decisión" — y salirse de la zona
+    # ES el contexto del Engaño Extremo, Secc 17: "la última oportunidad"). En ambos
+    # casos el límite exterior se sigue vigilando: sin esta vigilancia, un escape
+    # cuyo pico queda fuera de la zona jamás genera P1 nuevo y es invisible.
+    if nivel_anulacion is not None:
+        HI, LO, zmax, _zmin, r, palabras = _espacio_canonico(df, zona_max, zona_min, direction)
+        anul = nivel_anulacion if direction == "SELL" else -nivel_anulacion
+        etiqueta = ("ENGAÑO EXTREMO (tras zona agotada)" if numero_engano > 3
+                    else "ENGAÑO EXTREMO (vigilancia de escape)")
+        desde = max(ultimo_resultado.get("idx_muerte", ultimo_p1), 0)
+        res_ee = _vigilar_escape(df, HI, LO, zmax, anul, r, palabras, desde, etiqueta, historial)
+        if res_ee is not None:
+            res_ee["historial"] = historial
+            return res_ee
+
     if numero_engano > 3:
-        # Secc 15: un 4º engaño es inviable porque "obligaría al precio a salirse de
-        # la Zona de Decisión" — y salirse de la zona ES el contexto del Engaño
-        # Extremo (Secc 17): "la última oportunidad que tiene el mercado para darse
-        # la vuelta en esa zona". Tras el agotamiento, vigilamos ese escape.
-        if nivel_anulacion is not None:
-            HI, LO, zmax, _zmin, r, palabras = _espacio_canonico(df, zona_max, zona_min, direction)
-            anul = nivel_anulacion if direction == "SELL" else -nivel_anulacion
-            desde = ultimo_resultado.get("idx_muerte", ultimo_p1)
-            for j in range(desde, len(df)):
-                if HI[j] > zmax:
-                    detalles = {"nivel_engano": "ENGAÑO EXTREMO (tras zona agotada)",
-                                "pauta1_time": df.loc[j, 'open_time'],
-                                "sugerencia_volumen": "Volumen Normal"}
-                    origen_mov = float(LO[desde:j + 1].min())
-                    res = _engano_extremo(df, HI, LO, r, palabras, j, HI[j],
-                                          zmax, anul, origen_mov, detalles)
-                    historial.append(res)
-                    res["historial"] = historial
-                    return res
         return {"estado": "ZONA_AGOTADA", "historial": historial,
                 "mensaje": "Se rompieron 3 engaños. La zona ya no es válida para un 4to engaño (Descartada)."}
 

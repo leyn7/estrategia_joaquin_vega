@@ -135,9 +135,19 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
             ctx = " [ZONA MACRO: contexto, no se opera]" if e['contexto'] else ""
             print(f"[{e['lado']}] {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f} "
                   f"(ciclo {e['tf_ciclo']} -> patrón {e['tf_patron']}, ancla {e['ancla']:.2f}){ctx}")
+            # Trabajos de la zona (regla usuario 6 jul): TODA la cadena evaluada en el
+            # episodio operativo — el usuario necesita ver si la zona YA fue trabajada
+            # (entradas profundas, engaños, EE...), no solo el estado vigente.
+            previos = [h for h in (res.get('historial') or []) if h is not res]
+            for k, h in enumerate(previos, 1):
+                dh = h.get('detalles', {})
+                hora_h = dh.get('hora_gatillo') or dh.get('hora_validacion') or dh.get('pauta1_time')
+                hora_h_txt = f" @ {hora_h}" if hora_h is not None else ""
+                print(f"      trabajo {k}: {h['estado']}{hora_h_txt} — {h['mensaje']}")
             hora = res.get('detalles', {}).get('hora_gatillo')
             hora_txt = f" [gatillo: {hora}]" if hora is not None else ""
-            print(f"      {res['estado']}: {res['mensaje']}{hora_txt}{marca}")
+            pref = f"trabajo {len(previos) + 1} (vigente): " if previos else ""
+            print(f"      {pref}{res['estado']}: {res['mensaje']}{hora_txt}{marca}")
             op = e.get('operacion')
             if op:
                 veredicto = (f"CUMPLE 1:{RATIO_MINIMO:.0f}" if op['cumple_ratio']
