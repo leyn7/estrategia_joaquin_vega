@@ -219,6 +219,8 @@ def main():
     ap.add_argument("--hasta", default="2026-07-04")
     ap.add_argument("--paso-horas", type=int, default=24)
     ap.add_argument("--symbol", default=SYMBOL)
+    ap.add_argument("--solo-ee", action="store_true",
+                    help="solo entradas de Engaño Extremo (Secc 17): calidad EE o estado EE_*")
     args = ap.parse_args()
     symbol = args.symbol.upper()
 
@@ -247,6 +249,9 @@ def main():
             lado = e['lado']
             tp_nivel = max(tp_zona) if lado == "SELL" else min(tp_zona)
             for t in _entradas_de(res, e):
+                if args.solo_ee and not (str(t['patron']).startswith('ENGAÑO EXTREMO')
+                                         or t['estado'].startswith('EE_')):
+                    continue
                 hora = t['hora']
                 hora_naive = hora.tz_convert('UTC').tz_localize(None) if getattr(hora, 'tzinfo', None) else hora
                 # atribuir la señal al corte en el que NACIÓ (evitar duplicados)

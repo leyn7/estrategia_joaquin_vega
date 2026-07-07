@@ -19,7 +19,7 @@ from mdt_fractal import extraer_puntos_control
 
 from mdt_config import (SYMBOL, ORIGENES_MACRO_MANUAL, TF_LADDER, TF_MINUTOS,
                         MIN_VELAS_TF, MAX_VELAS_DESCARGA, GRADO_MIN_OPERABLE_PCT,
-                        NIVEL_382, NIVEL_618)
+                        ZONA_MAX_OPERABLE_PCT, NIVEL_382, NIVEL_618)
 
 
 def _ahora():
@@ -413,6 +413,84 @@ def resolver_concurrencia(zonas, buy_or_sell, current_price=None, verbose=True):
     return finales
 
 
+def _auditar_ultimo_ciclo(ciclos, buys, sells, precio, verbose=True):
+    """Auditoría del último ciclo (regla usuario 7 jul 2026).
+
+    El último punto de control que activa zonas (el ancla más reciente del mapa)
+    es siempre el ciclo más pequeño de la estructura: sus zonas deben auditarse
+    contra las concurrencias del ciclo anterior SIN privilegios — aquí el TOQUE
+    cuenta como concurrencia (Secc 19: "se superponen o se tocan") y no aplica
+    la excepción de zona-en-trabajo. Toda zona suya que toque o solape una zona
+    de la misma dirección de un ciclo anterior se elimina (la Zona Mayor manda).
+    Si pierde todas sus zonas, el ancla no sirve (caso real: la muñeca M5 573.21
+    fabricaba Media/Baja de 2.4 pegadas a las Medias del 568.58 y el 556.45).
+
+    Calibración con datos (7 jul): el TOQUE exacto en el borde solo mata a las
+    MUÑECAS ANIDADAS — sus zonas tejen contra la estructura madre por
+    construcción. Un CP normal que apenas toca en el borde convive (espíritu
+    Caso 2: la Parte Alta del 572.71 del 3 jul tocaba la Media del 602.79 y fue
+    una venta ganadora); para él solo elimina el solape real.
+    """
+    t_por_ciclo = {}
+    for c in ciclos:
+        if c.get('ancla') is not None and c.get('ancla_time') is not None:
+            k = (round(c['ancla'], 2), c.get('tf'))
+            if k not in t_por_ciclo or c['ancla_time'] > t_por_ciclo[k][0]:
+                t_por_ciclo[k] = (c['ancla_time'], bool(c.get('muneca')))
+
+    def info_de(z):
+        return t_por_ciclo.get((round(z['ancla'], 2), z.get('tf'))) if z.get('ancla') is not None else None
+
+    def t_de(z):
+        i = info_de(z)
+        return i[0] if i else None
+
+    tiempos = [t_de(z) for z in buys + sells]
+    tiempos = [t for t in tiempos if t is not None]
+    if not tiempos:
+        return buys, sells
+    t_ultimo = max(tiempos)
+
+    quedan_del_ultimo = 0
+    ancla_ultimo = None
+    resultado = []
+    for lista in (sells, buys):
+        finales = []
+        for z in lista:
+            t = t_de(z)
+            if t != t_ultimo:
+                finales.append(z)
+                continue
+            ancla_ultimo = z['ancla']
+            zmax, zmin = max(z['z']), min(z['z'])
+            es_muneca = (info_de(z) or (None, False))[1]
+            # Choca solo contra zonas OPERATIVAS de ciclos anteriores: las zonas
+            # macro de contexto (más anchas que el % del precio) cubren medio
+            # gráfico y no son la concurrencia del "ciclo anterior".
+            # Muñeca anidada: el toque en el borde cuenta (<=). CP normal: solo
+            # el solape real (<) — el toque exacto convive (Caso 2).
+            if es_muneca:
+                toca = lambda o: min(o['z']) <= zmax and zmin <= max(o['z'])
+            else:
+                toca = lambda o: min(o['z']) < zmax and zmin < max(o['z'])
+            choque = next((o for o in lista if o is not z and t_de(o) is not None
+                           and t_de(o) < t_ultimo
+                           and (max(o['z']) - min(o['z'])) <= precio * ZONA_MAX_OPERABLE_PCT
+                           and toca(o)), None)
+            if choque is not None:
+                if verbose:
+                    print(f"[AUDITORÍA ÚLTIMO CICLO] {z['name']} {zmax:.2f}-{zmin:.2f} "
+                          f"ELIMINADA: toca/solapa {choque['name']} "
+                          f"{max(choque['z']):.2f}-{min(choque['z']):.2f} (la mayor manda)")
+                continue
+            quedan_del_ultimo += 1
+            finales.append(z)
+        resultado.append(finales)
+    if verbose and ancla_ultimo is not None and quedan_del_ultimo == 0:
+        print(f"[AUDITORÍA ÚLTIMO CICLO] el ancla {ancla_ultimo:.2f} queda SIN zonas: no sirve")
+    return resultado[1], resultado[0]
+
+
 def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
     """Reconstruye el mapa completo en el instante `cutoff` (Regla 2; None = ahora).
 
@@ -495,6 +573,7 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
             c['peso'] = peso_base - j
             c['ruta'] = nombre
             c['direction'] = direction
+            c['muneca'] = True  # ruta anidada (Secc 2): sus zonas tejen contra la madre
             ciclos_todos.append(c)
             _registrar_ciclo(c, direction, buys, sells, alerts, verbose)
         res_prev, dir_prev, peso_prev = res, direction, peso_base
@@ -509,6 +588,11 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
     if verbose:
         print("\n[ZONAS DE VENTAS]")
     final_sells = resolver_concurrencia(sells, "SELL", current_price, verbose)
+
+    # Regla 7 jul: el último ciclo del mapa se audita contra las concurrencias
+    # de los anteriores (toque = concurrencia, sin excepción de zona-en-trabajo)
+    final_buys, final_sells = _auditar_ultimo_ciclo(ciclos_todos, final_buys,
+                                                    final_sells, current_price, verbose)
 
     if verbose:
         print("\n--- ZONAS OPERATIVAS FINALES ---")
