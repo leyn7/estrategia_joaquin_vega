@@ -28,7 +28,7 @@ import requests
 
 import mdt_data
 import mdt_telegram
-from mdt_config import SYMBOL, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
+from mdt_config import SYMBOL, RATIO_MINIMO, PARCIAL_R, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
 
 logging.basicConfig(level=logging.INFO,
@@ -97,6 +97,16 @@ NOTIF_ACTIVACION = os.environ.get('MDT_NOTIF_ACTIVACION', '0') == '1'
 NOTIF_ZONA = os.environ.get('MDT_NOTIF_ZONA', '0') == '1'
 NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'profundo').lower()
 FMT_ESTADO = 3  # versión del formato de firma; un cambio re-basa sin ráfaga
+
+# Gatillos EJECUTADOS = entrada a mercado real. Se persisten como OPERACIONES
+# (hechos): la cadena de patrones es sin-estado y al re-parsear con velas
+# nuevas puede borrar del historial un gatillo que SÍ disparó (caso real: el
+# EE_GATILLO venta 590.28/SL 593.83 del 5 jul desapareció el 8 jul cuando la
+# Entrada Profunda re-leyó el episodio). La operación registrada conserva sus
+# datos reales (entrada/SL/TP originales) y se sigue con velas, pase lo que
+# pase con el re-parseo. Sobrevive reinicios (estado_vivo.json).
+ESTADOS_EJECUTADOS = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO",
+                      "DT_IMPULSO_GATILLO", "EE_GATILLO")
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +194,170 @@ def resumen_analisis(sym, resultado):
         lineas += [_texto_escaneo(e) for e in accionables]
     else:
         lineas.append("Sin señales operables ahora.")
+    return '\n'.join(lineas)
+
+
+# ---------------------------------------------------------------------------
+# Operaciones reales (gatillos ejecutados persistidos + gestión Secc 20)
+# ---------------------------------------------------------------------------
+def _op_de_escaneo(e):
+    """Extrae los HECHOS de un gatillo ejecutado (o None): entrada, SL original,
+    TP del ciclo y hora — lo que el operador necesita aunque el re-parseo de la
+    cadena luego pierda este trabajo."""
+    res = e['resultado']
+    if res['estado'] not in ESTADOS_EJECUTADOS:
+        return None
+    d = res.get('detalles', {})
+    hora = d.get('hora_gatillo')
+    entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
+               or d.get('entrada_dt_618'))
+    if entrada is None and res['estado'].startswith('EE_'):
+        entrada = e['rango'][0] if e['lado'] == 'SELL' else e['rango'][1]
+    sl = d.get('stop_loss', d.get('extremo_escape'))
+    tp = e.get('tp_zona')
+    if hora is None or entrada is None or sl is None or tp is None:
+        return None
+    return {'zona': e['zona'], 'lado': e['lado'], 'patron': res['estado'],
+            'tf': e['tf_patron'], 'ancla': float(e['ancla']),
+            'entrada': round(float(entrada), 4), 'sl': round(float(sl), 4),
+            'tp_zona': [round(float(max(tp)), 4), round(float(min(tp)), 4)],
+            'hora_gatillo': str(_naive(hora))}
+
+
+def _seguir_operacion(sym, op):
+    """Sigue la operación con velas reales desde su gatillo (gestión Secc 20).
+
+    Determinista desde los hechos persistidos: SL tocado -> SL (-1R). Si el
+    objetivo supera 1:3, parcial OBLIGATORIO a la mitad del objetivo (mín 1:2):
+    mitad fuera + stop a BREAKEVEN; luego breakeven cierra el resto en lo
+    asegurado y el TP completa. Conservador vela a vela (el lado malo primero).
+    """
+    lado, entrada, sl = op['lado'], op['entrada'], op['sl']
+    riesgo = abs(sl - entrada)
+    if riesgo <= 0:
+        return None
+    tp = max(op['tp_zona']) if lado == 'SELL' else min(op['tp_zona'])
+    ratio = abs(entrada - tp) / riesgo
+    signo = -1.0 if lado == 'SELL' else 1.0
+    nivel_parcial = None
+    ratio_parcial = 0.0
+    if ratio > RATIO_MINIMO:
+        ratio_parcial = max(PARCIAL_R, ratio / 2.0)
+        nivel_parcial = entrada + signo * ratio_parcial * riesgo
+    hora = pd.Timestamp(op['hora_gatillo'])
+    df = get_klines_vivo(sym, op['tf'], hora.tz_localize('UTC'))
+    velas = df[df['open_time'] > hora]
+    base = {'ratio': ratio, 'nivel_parcial': nivel_parcial, 'tp': tp}
+    fase, r_aseg = 'ABIERTA', 0.0
+    for v in velas.itertuples():
+        if fase == 'ABIERTA':
+            if (v.high >= sl) if lado == 'SELL' else (v.low <= sl):
+                return {**base, 'fase': 'SL', 'r': -1.0, 'sl_actual': sl}
+            if nivel_parcial is not None and \
+                    ((v.low <= nivel_parcial) if lado == 'SELL' else (v.high >= nivel_parcial)):
+                fase, r_aseg = 'PARCIAL', 0.5 * ratio_parcial
+            elif nivel_parcial is None and \
+                    ((v.low <= tp) if lado == 'SELL' else (v.high >= tp)):
+                return {**base, 'fase': 'TP', 'r': ratio, 'sl_actual': sl}
+        else:
+            if (v.high >= entrada) if lado == 'SELL' else (v.low <= entrada):
+                return {**base, 'fase': 'BE', 'r': r_aseg, 'sl_actual': entrada}
+            if (v.low <= tp) if lado == 'SELL' else (v.high >= tp):
+                return {**base, 'fase': 'TP', 'r': r_aseg + 0.5 * ratio, 'sl_actual': entrada}
+    ult = float(velas['close'].iloc[-1]) if len(velas) else entrada
+    r_flot = ((entrada - ult) if lado == 'SELL' else (ult - entrada)) / riesgo
+    if fase == 'PARCIAL':
+        return {**base, 'fase': 'PARCIAL', 'r': r_aseg + 0.5 * r_flot,
+                'r_asegurada': r_aseg, 'sl_actual': entrada, 'precio': ult}
+    return {**base, 'fase': 'ABIERTA', 'r': r_flot, 'sl_actual': sl, 'precio': ult}
+
+
+def _texto_op_real(op, s):
+    """Línea de estado de una operación real (para resumen y alertas)."""
+    accion = 'VENTA' if op['lado'] == 'SELL' else 'COMPRA'
+    hora = _hora_cot(pd.Timestamp(op['hora_gatillo']))
+    txt = (f"{accion} {op['entrada']:.2f} ({op['patron']}, {hora})\n"
+           f"  zona: {op['zona']} | SL original {op['sl']:.2f} | "
+           f"TP {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f} (1:{s['ratio']:.1f})")
+    if s['fase'] == 'PARCIAL':
+        txt += (f"\n  PARCIAL HECHO en {s['nivel_parcial']:.2f} "
+                f"(+{s.get('r_asegurada', 0):.2f}R asegurada) -> STOP EN BREAKEVEN "
+                f"{s['sl_actual']:.2f} | flotante total {s['r']:+.2f}R")
+    elif s['fase'] == 'ABIERTA':
+        extra = (f" | parcial (Secc 20) en {s['nivel_parcial']:.2f}"
+                 if s['nivel_parcial'] is not None else "")
+        txt += f"\n  ABIERTA: SL {s['sl_actual']:.2f}{extra} | flotante {s['r']:+.2f}R"
+    else:
+        cierre = {'SL': 'STOP LOSS', 'BE': 'BREAKEVEN (tras parcial)', 'TP': 'TP COMPLETO'}
+        txt += f"\n  CERRADA por {cierre.get(s['fase'], s['fase'])}: {s['r']:+.2f}R"
+    return txt
+
+
+def actualizar_operaciones(sym, resultado, mem):
+    """Registra gatillos ejecutados nuevos y sigue los abiertos con velas reales.
+    Devuelve eventos de transición (parcial/breakeven/SL/TP). Las operaciones
+    son HECHOS: se notifican siempre, sin filtro de notificaciones."""
+    ops = mem.setdefault('operaciones', {})
+    eventos = []
+    # 1) registrar gatillos ejecutados nuevos (dedup por lado|ancla|patron|entrada)
+    for e in resultado['escaneos']:
+        if e['contexto']:
+            continue
+        op = _op_de_escaneo(e)
+        if op is None:
+            continue
+        k = f"{op['lado']}|{op['ancla']:.2f}|{op['patron']}|{op['entrada']:.2f}"
+        if k not in ops:
+            ops[k] = {**op, 'fase': None}
+    # 2) seguir cada operación no cerrada
+    for k, op in list(ops.items()):
+        if op.get('fase') in ('SL', 'BE', 'TP'):
+            continue
+        try:
+            s = _seguir_operacion(sym, op)
+        except Exception:
+            log.exception("seguimiento de operación %s", k)
+            continue
+        if s is None:
+            ops.pop(k)
+            continue
+        previa = op.get('fase')
+        if s['fase'] != previa:
+            icono = {'PARCIAL': '💰', 'SL': '☠️', 'BE': '⚖️', 'TP': '🏁'}.get(s['fase'], '📌')
+            titulo = {'PARCIAL': 'PARCIAL TOCADO -> STOP A BREAKEVEN (Secc 20)',
+                      'SL': 'STOP LOSS: operación cerrada',
+                      'BE': 'BREAKEVEN tocado: cerrada con lo asegurado',
+                      'TP': 'TP COMPLETO'}.get(s['fase'], 'OPERACIÓN REGISTRADA')
+            if previa is None and s['fase'] == 'ABIERTA':
+                titulo = 'OPERACIÓN REGISTRADA (gatillo ejecutado)'
+            eventos.append(f"{icono} {sym} | {titulo}\n{_texto_op_real(op, s)}")
+        op['fase'] = s['fase']
+        if s['fase'] in ('SL', 'BE', 'TP'):
+            op['r_final'] = round(s['r'], 2)
+    return eventos
+
+
+def texto_operaciones(sym, mem):
+    """Bloque 'OPERACIONES REALES' para el arranque y el comando operaciones."""
+    ops = mem.get('operaciones') or {}
+    vivas, cerradas = [], []
+    for op in ops.values():
+        if op.get('fase') in ('SL', 'BE', 'TP'):
+            cerradas.append(op)
+            continue
+        try:
+            s = _seguir_operacion(sym, op)
+        except Exception:
+            continue
+        if s is not None:
+            vivas.append(_texto_op_real(op, s))
+    if not vivas and not cerradas:
+        return ''
+    lineas = [f"OPERACIONES REALES {sym}:"]
+    lineas += vivas or ["  (ninguna abierta)"]
+    if cerradas:
+        lineas.append("Cerradas: " + ", ".join(
+            f"{o['patron']} {o['entrada']:.2f} ({o.get('r_final', 0):+.2f}R)" for o in cerradas[-5:]))
     return '\n'.join(lineas)
 
 
@@ -284,10 +458,19 @@ def detectar_eventos(sym, resultado, mem):
     mem['fmt'] = FMT_ESTADO
     mem['ultimo_escaneo'] = str(ahora)
     mem['ultimo_precio'] = float(precio)
+
+    # 4) Operaciones reales: registro + gestión Secc 20 (sin filtro de notifs —
+    # son los hechos del operador y sobreviven al re-parseo de la cadena)
+    ev_ops = actualizar_operaciones(sym, resultado, mem)
+
     if baseline:
-        return [f"👁 Vigilando {sym} (escaneo cada {INTERVALO // 60} min).\n\n"
-                + resumen_analisis(sym, resultado)]
-    return eventos
+        msj = (f"👁 Vigilando {sym} (escaneo cada {INTERVALO // 60} min).\n\n"
+               + resumen_analisis(sym, resultado))
+        ops_txt = texto_operaciones(sym, mem)
+        if ops_txt:
+            msj += "\n\n" + ops_txt
+        return [msj]
+    return eventos + ev_ops
 
 
 # ---------------------------------------------------------------------------
@@ -298,6 +481,7 @@ AYUDA = ("Comandos:\n"
          "  agrega SYM — añade a la vigilancia (ej. agrega ETHUSDT)\n"
          "  quita SYM — deja de vigilar\n"
          "  analiza SYM — análisis completo puntual (1-3 min)\n"
+         "  operaciones — operaciones reales registradas (SL/parcial/estado)\n"
          "  ayuda — esto")
 
 
@@ -325,6 +509,11 @@ def atender_comando(estado, texto):
             p = m.get('ultimo_precio')
             lineas.append(f"  {s}" + (f" — último {p:.2f}" if p else " — sin escanear aún"))
         return "Vigilando:\n" + '\n'.join(lineas)
+    if cmd in ('operaciones', 'ops', 'operacion'):
+        bloques = [texto_operaciones(s, estado['simbolos'].get(s, {}))
+                   for s in estado['watchlist']]
+        bloques = [b for b in bloques if b]
+        return '\n\n'.join(bloques) if bloques else "Sin operaciones registradas aún."
     if cmd in ('agrega', 'add') and arg:
         if arg in estado['watchlist']:
             return f"{arg} ya está en la lista."
