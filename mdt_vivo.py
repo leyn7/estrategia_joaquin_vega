@@ -83,6 +83,21 @@ from mdt_escaner import escanear_mapa, ESTADOS_OPERABLES  # noqa: E402
 ESTADOS_HITO = ("ANULADO_POR_CARENCIA", "ROTO_POR_DOBLE_TOQUE", "ROTO_POR_STOP_LOSS",
                 "P3_CORTA_ROTA", "ROTO_POR_RETESTEO_DILATACION", "ZONA_AGOTADA")
 
+# Engaño Profundo (nombre del usuario) = Entrada Profunda (Secc 16) + Engaño
+# Extremo (Secc 17): el barrido que profundiza/se sale de la zona y se devuelve.
+ESTADOS_PROFUNDO = ("ENTRADA_PROFUNDA_ESPERANDO", "P3_CORTA_GATILLO",
+                    "EE_ARMADO", "EE_GATILLO")
+
+# Qué notificar (regla usuario 8 jul 2026): por defecto SOLO el Engaño Profundo
+# con su ancla. Ajustable por .env sin tocar código:
+#   MDT_NOTIF_ACTIVACION=1  -> también avisa activaciones del 38.2
+#   MDT_NOTIF_ZONA=1        -> también avisa llegadas del precio a una zona
+#   MDT_NOTIF_PATRON=operables|todos  -> amplía más allá del engaño profundo
+NOTIF_ACTIVACION = os.environ.get('MDT_NOTIF_ACTIVACION', '0') == '1'
+NOTIF_ZONA = os.environ.get('MDT_NOTIF_ZONA', '0') == '1'
+NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'profundo').lower()
+FMT_ESTADO = 3  # versión del formato de firma; un cambio re-basa sin ráfaga
+
 
 # ---------------------------------------------------------------------------
 # Estado persistente
@@ -185,7 +200,10 @@ def detectar_eventos(sym, resultado, mem):
     y actualiza `mem` in place. En la primera pasada solo registra (baseline)."""
     mapa = resultado['mapa']
     precio = mapa['precio']
-    baseline = not mem.get('baseline')
+    # baseline = primera pasada del símbolo (solo registra, no notifica). También
+    # se re-basa si cambió el formato de firma, para no soltar una ráfaga del
+    # historial vivo tras un cambio de reglas.
+    baseline = not mem.get('baseline') or mem.get('fmt') != FMT_ESTADO
     eventos = []
     ahora = pd.Timestamp.now(tz='UTC').tz_localize(None)
 
@@ -198,12 +216,12 @@ def detectar_eventos(sym, resultado, mem):
         k = f"{c['direction']}|{c['ancla']:.2f}"
         activado = bool(ev.get('activado'))
         previo = act.get(k)
-        if not baseline and activado and previo is False:
+        if not baseline and NOTIF_ACTIVACION and activado and previo is False:
             eventos.append(f"🔔 {sym} | CICLO ACTIVADO (tocó su 38.2): {c['nombre']} "
                            f"({c['tf']}, ancla {c['ancla']:.2f}) "
                            f"{_hora_cot(ev.get('hora_activacion'))}\n"
                            "Sus zonas de trabajo quedan operativas.")
-        elif not baseline and activado and previo is None:
+        elif not baseline and NOTIF_ACTIVACION and activado and previo is None:
             # ciclo nuevo que nació ya activado: solo avisar si es reciente
             h = ev.get('hora_activacion')
             if h is not None and (ahora - _naive(h)) < pd.Timedelta(seconds=4 * INTERVALO):
@@ -223,7 +241,7 @@ def detectar_eventos(sym, resultado, mem):
                 continue  # zona macro: contexto, sin alertas de llegada
             k = _clave_zona(lado, z['name'], z['ancla'])
             dentro = bool(zmin <= precio <= zmax)  # bool nativo: np.bool_ no es JSON
-            if not baseline and dentro and not en_zona.get(k):
+            if not baseline and NOTIF_ZONA and dentro and not en_zona.get(k):
                 accion = 'VENTAS' if lado == 'SELL' else 'COMPRAS'
                 eventos.append(f"📍 {sym} | PRECIO EN ZONA DE {accion}: {z['name']} "
                                f"{zmax:.2f}-{zmin:.2f} (ancla {z['ancla']:.2f}, "
@@ -231,23 +249,39 @@ def detectar_eventos(sym, resultado, mem):
                                "A vigilar formación de patrón (3 Pautas).")
             en_zona[k] = dentro
 
-    # 3) Cambios de patrón por zona (operables + hitos), con dedup por firma
+    # 3) Cambios de patrón por zona. Por defecto SOLO Engaño Profundo (regla
+    # usuario 8 jul). Firma ESTABLE: el nivel de entrada redondeado, NO la
+    # hora_gatillo — esta última cambia cada vez que la zona se re-mide vela a
+    # vela, y hacía re-notificar el mismo engaño una y otra vez.
     patron = mem.setdefault('patron', {})
     for e in resultado['escaneos']:
         if e['contexto']:
             continue
         res = e['resultado']
-        d = res.get('detalles', {})
+        estado = res['estado']
+        if NOTIF_PATRON == 'profundo':
+            interesa = estado in ESTADOS_PROFUNDO
+        elif NOTIF_PATRON == 'operables':
+            interesa = estado in ESTADOS_OPERABLES or estado in ESTADOS_HITO
+        else:  # 'todos'
+            interesa = True
+        # Firma = solo el estado. La zona (su ancla) ya está en la clave `k`, así
+        # que un mismo Engaño Profundo se avisa UNA vez y no se repite aunque la
+        # zona oscile su borde vela a vela; solo re-avisa si el patrón murió (otro
+        # estado de por medio) y volvió a armarse.
         k = _clave_zona(e['lado'], e['zona'], e['ancla'])
-        firma = f"{res['estado']}|{d.get('hora_gatillo') or d.get('pauta1_time') or ''}"
-        if not baseline and firma != patron.get(k):
-            if res['estado'] in ESTADOS_OPERABLES:
-                eventos.append(f"🎯 {sym} | SEÑAL: {_texto_escaneo(e)}")
-            elif res['estado'] in ESTADOS_HITO:
+        firma = estado
+        if not baseline and interesa and firma != patron.get(k):
+            if estado in ESTADOS_HITO:
                 eventos.append(f"💀 {sym} | HITO: {_texto_escaneo(e)}")
+            elif estado in ESTADOS_PROFUNDO:
+                eventos.append(f"🎯 {sym} | ENGAÑO PROFUNDO: {_texto_escaneo(e)}")
+            else:
+                eventos.append(f"🎯 {sym} | SEÑAL: {_texto_escaneo(e)}")
         patron[k] = firma
 
     mem['baseline'] = True
+    mem['fmt'] = FMT_ESTADO
     mem['ultimo_escaneo'] = str(ahora)
     mem['ultimo_precio'] = float(precio)
     if baseline:
