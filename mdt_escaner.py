@@ -25,13 +25,18 @@ ESTADOS_OPERABLES = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO
 def direccion_prioritaria(mapa):
     """Regla del usuario (4 jul): "el que manda es el ciclo cuya zona se está
     trabajando ACTIVAMENTE" — la zona MÁS ESPECÍFICA (la más angosta) que contiene
-    al precio, no la más grande que lo envuelva. Si el precio trabaja una zona de
-    ventas, las ventas son el Movimiento Prioritario; operar en contra es un
-    Movimiento Secundario con menor volumen/riesgo (Secc 1/7.1)."""
+    al precio, no la más grande que lo envuelva.
+
+    Refinada (10 jul): las zonas macro de CONTEXTO no mandan — si no se operan,
+    tampoco dictan la prioridad (caso real: la Media del Macro Alcista 638-410
+    dictaba COMPRAS y marcaba Secundaria una venta nacida de un trabajo real).
+    Esta dirección global queda como contexto del mapa; la prioridad de cada
+    señal la hereda de SU propia zona en trabajo (_operacion)."""
     precio = mapa['precio']
     candidatos = [("SELL", z) for z in mapa['sells']] + [("BUY", z) for z in mapa['buys']]
     contienen = [(lado, z) for lado, z in candidatos
-                 if z.get('z') and min(z['z']) <= precio <= max(z['z'])]
+                 if z.get('z') and min(z['z']) <= precio <= max(z['z'])
+                 and (max(z['z']) - min(z['z'])) <= precio * ZONA_MAX_OPERABLE_PCT]
     if not contienen:
         return None, None
     lado, z = min(contienen, key=lambda t: max(t[1]['z']) - min(t[1]['z']))
@@ -61,13 +66,22 @@ def _operacion(escaneo, prioritaria):
         return None
     recompensa = abs(entrada - tp)
     ratio = recompensa / riesgo
-    prioritario = prioritaria is None or lado == prioritaria
+    # Regla del usuario (10 jul): la señal HEREDA la prioridad de SU zona — si
+    # una zona en trabajo te da la entrada, esa operación es el Movimiento
+    # Prioritario de ese trabajo, con sus propios TP ("en el trading nada es
+    # seguro: cada oportunidad que se opere tendrá sus propios TP"). La
+    # dirección global (zona más angosta no-contexto con el precio dentro) ya
+    # no degrada la señal a Secundaria; si hay trabajo vivo en contra, se avisa.
+    aviso = None
+    if prioritaria is not None and lado != prioritaria:
+        aviso = ("hay trabajo vivo en contra: el precio está dentro de una zona de "
+                 + ("VENTAS" if prioritaria == "SELL" else "COMPRAS"))
     return {"entrada": entrada, "stop_loss": sl,
             "tp_zona": (max(tp_zona), min(tp_zona)), "tp_nivel": tp,
             "riesgo": riesgo, "recompensa": recompensa, "ratio": ratio,
             "cumple_ratio": ratio >= RATIO_MINIMO,
-            "movimiento": "PRIORITARIO" if prioritario else "SECUNDARIO",
-            "volumen": "Normal" if prioritario else "Reducido (Movimiento Secundario, Secc 1)"}
+            "movimiento": "PRIORITARIO (su zona en trabajo)", "aviso": aviso,
+            "volumen": "Normal"}
 
 
 def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
@@ -126,8 +140,9 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
 
     if verbose:
         if zona_que_manda:
-            print(f"\nEL CICLO QUE MANDA: precio trabajando '{zona_que_manda}' -> "
-                  f"Movimiento Prioritario = {'COMPRAS' if prioritaria == 'BUY' else 'VENTAS'}")
+            print(f"\nTRABAJO ACTUAL DEL PRECIO: dentro de '{zona_que_manda}' "
+                  f"({'COMPRAS' if prioritaria == 'BUY' else 'VENTAS'}) — cada señal "
+                  "hereda la prioridad de su propia zona")
         print("\n--- ESCÁNER DE PATRONES SOBRE EL MAPA (TF del patrón = 1 por debajo del ciclo) ---")
         for e in escaneos:
             res = e['resultado']
@@ -157,6 +172,8 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
                       f"(al borde: {op['recompensa']:.2f})")
                 print(f"      R:B 1:{op['ratio']:.1f} [{veredicto}] | {op['movimiento']} "
                       f"| Volumen: {op['volumen']}")
+                if op.get('aviso'):
+                    print(f"      AVISO: {op['aviso']}")
     return {'mapa': mapa, 'escaneos': escaneos,
             'prioritaria': prioritaria, 'zona_que_manda': zona_que_manda}
 

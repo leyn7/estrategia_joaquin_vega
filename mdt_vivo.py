@@ -149,11 +149,14 @@ def _texto_operacion(op):
         return ''
     ver = (f"CUMPLE 1:{RATIO_MINIMO:.0f}" if op['cumple_ratio']
            else f"NO CUMPLE 1:{RATIO_MINIMO:.0f} -> NO OPERAR")
-    return (f"\n  Entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
-            f"(riesgo {op['riesgo']:.2f})"
-            f"\n  TP zona {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f}"
-            f"\n  R:B 1:{op['ratio']:.1f} [{ver}] | {op['movimiento']}"
-            f"\n  Volumen: {op['volumen']}")
+    txt = (f"\n  Entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
+           f"(riesgo {op['riesgo']:.2f})"
+           f"\n  TP zona {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f}"
+           f"\n  R:B 1:{op['ratio']:.1f} [{ver}] | {op['movimiento']}"
+           f"\n  Volumen: {op['volumen']}")
+    if op.get('aviso'):
+        txt += f"\n  ⚠ {op['aviso']}"
+    return txt
 
 
 def _texto_escaneo(e):
