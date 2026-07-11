@@ -265,6 +265,39 @@ def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=T
             idx0 = int(df_eval['open_time'].searchsorted(c['ancla_time']))
             c['eval'] = evaluar_ciclo(c['ancla'], df_eval, idx0, direction)
 
+    # --- RESET 61.8 DEL TRAMO (regla usuario 10 jul; Secc 2) ---
+    # "Si el precio de algún tramo llega al 0.618 ya no hay puntos de control
+    # válidos": cuando el retroceso POSTERIOR al extremo del tramo cruza el
+    # 61.8 del impulso completo (origen -> extremo), los puntos de control
+    # internos dejan de ser válidos — queda solo el macro del tramo trabajando
+    # su Media (que empieza justo en ese 61.8). La extracción no lo ve porque
+    # el tramo se corta en su extremo; se verifica aquí con las velas post-extremo.
+    ext['reset_618'] = None
+    if (ext.get('extremo_time') is not None and ext['extremo'] is not None
+            and ext['origen'] is not None):
+        bull = direction == "BULLISH"
+        imp = abs(ext['extremo'] - ext['origen'])
+        if imp > 0:
+            nivel618 = ext['extremo'] + imp * NIVEL_618 * (-1 if bull else 1)
+            t_extremo = pd.Timestamp(ext['extremo_time'])
+            limite = cutoff or _ahora()
+            span_min = max((limite - t_extremo).total_seconds() / 60.0, 1)
+            tf_post = ext['tf_macro']
+            if span_min / TF_MINUTOS[tf_post] > MAX_VELAS_DESCARGA:
+                tf_post = _tf_para_span(span_min)
+            df_post = _descargar(tf_post, t_extremo, cutoff, symbol)
+            df_post = df_post[df_post['open_time'] > t_extremo]
+            cruce = (df_post[df_post['low'] <= nivel618] if bull
+                     else df_post[df_post['high'] >= nivel618])
+            if len(cruce):
+                hora_reset = cruce['open_time'].iloc[0]
+                ext['reset_618'] = {'nivel': nivel618, 'hora': hora_reset}
+                for c in ciclos:
+                    ev = c.get('eval') or {}
+                    if not c['es_macro'] and ev.get('estado') == 'VIVO':
+                        c['eval'] = {**ev, 'estado': 'MUERTO', 'nivel_muerte': nivel618,
+                                     'hora_muerte': hora_reset, 'reset_tramo_618': True}
+
     # Capa operativa: grado mínimo del 1% del precio (el macro siempre es operable)
     for c in ciclos:
         c['operable'] = c['es_macro'] or (precio_ref is not None and
@@ -293,7 +326,8 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
 
     if ev['estado'] == 'MUERTO':
         if verbose:
-            print(f"{etiqueta} -> MUERTO: tocó su 138.2 ({ev['nivel_muerte']:.2f}) el {ev['hora_muerte']}")
+            causa = ("RESET 61.8 del tramo" if ev.get('reset_tramo_618') else "tocó su 138.2")
+            print(f"{etiqueta} -> MUERTO: {causa} ({ev['nivel_muerte']:.2f}) el {ev['hora_muerte']}")
         return
     if ev['estado'] == 'SIN_IMPULSO':
         if verbose:
@@ -539,6 +573,7 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
         tramos.append({'nombre': nombre, 'direction': direction,
                        'origen': res['origen'], 'extremo': res['extremo'],
                        'origen_time': res['origen_time'], 'ciclos': res['ciclos'],
+                       'reset_618': res.get('reset_618'),
                        'buys': [{**z} for z in buys_r], 'sells': [{**z} for z in sells_r],
                        'alerts': list(alerts_r)})
 
@@ -648,6 +683,11 @@ def reporte_tramos(mapa):
         sentido = "alcista" if t['direction'] == 'BULLISH' else "bajista"
         lineas.append("")
         lineas.append(f"=== {t['nombre'].upper()} ({sentido}): {t['origen']:.2f} -> {t['extremo']:.2f} ===")
+        if t.get('reset_618'):
+            r = t['reset_618']
+            lineas.append(f"  RESET 61.8 DEL TRAMO: el retroceso cruzó {r['nivel']:.2f} — "
+                          "los puntos de control internos ya NO son válidos; queda solo "
+                          "el macro del tramo trabajando su Media.")
         vivos = [c for c in t['ciclos'] if c.get('eval', {}).get('estado') == 'VIVO']
         muertos = sum(1 for c in t['ciclos'] if c.get('eval', {}).get('estado') == 'MUERTO')
         if not vivos:
