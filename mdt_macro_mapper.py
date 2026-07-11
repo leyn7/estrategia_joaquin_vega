@@ -668,14 +668,16 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
 
 
 def reporte_tramos(mapa):
-    """Vista de tramos INDEPENDIENTES (Secc 2 + regla usuario 10 jul: "cada
-    tramo sea mirado y operado por separado; que trabaje sus propios ciclos y
-    puntos de control").
+    """Vista de tramos INDEPENDIENTES (Secc 2 + reglas usuario 10 jul: "cada
+    tramo sea mirado y operado por separado" / "me interesa saber si hay ciclos
+    que tengan zonas operables, omitir los que no").
 
-    Por cada tramo (muñeca): sus puntos de control vigentes (vivos) marcando
-    cuáles son operativos, sus zonas de trabajo con concurrencia SOLO INTERNA
-    (las zonas de otros tramos no tejen aquí) y la posición del precio respecto
-    a las zonas de ESE tramo (dentro / la más próxima). Devuelve el texto.
+    Por cada tramo (muñeca): se aplica la concurrencia de zonas (Secc 19) SOLO
+    entre los ciclos del tramo y se listan ÚNICAMENTE los ciclos que conservan
+    al menos una zona útil (Secc 6: ciclo útil mientras tenga >=1 zona útil),
+    con sus zonas debajo. Los vivos que quedaron sin zona útil se omiten (línea
+    resumen con el motivo). Cierra con la posición del precio respecto a las
+    zonas de ESE tramo (dentro / la más próxima). Devuelve el texto.
     """
     precio = mapa['precio']
     lineas = [f"MAPA POR TRAMOS INDEPENDIENTES | precio {precio:.2f}"]
@@ -693,50 +695,75 @@ def reporte_tramos(mapa):
         if not vivos:
             lineas.append(f"  Sin puntos de control vivos ({muertos} muertos): sin estructura vigente.")
             continue
-        lineas.append(f"  Puntos de control vigentes ({len(vivos)} vivos / {muertos} muertos):")
-        for c in vivos:
-            ev = c['eval']
-            grado = f"grado {c['grado']:.2f}" if c['grado'] is not None else "macro del tramo"
-            op = "OPERATIVO" if c.get('operable', True) else "sub-operable <1%"
-            if ev.get('en_excursion'):
-                estado = ("TRABAJANDO parte " + ("baja" if t['direction'] == 'BULLISH' else "alta")
-                          if ev.get('zona_origen_en_trabajo') else "en indecisión (inoperable)")
-            elif ev.get('activado'):
-                estado = "ACTIVADO"
-            else:
-                estado = f"en alerta (se activa en {ev['nivel_activacion']:.2f})"
-            evo = " | EVOLUCIONADO" if ev.get('evolucionado') else ""
-            lineas.append(f"   - {c['ancla']:.2f} ({c['tf']}, {grado}) [{op}] {estado}{evo}")
-        # Zonas del tramo: concurrencia interna, independiente de otros tramos
+
+        # Concurrencia de zonas del tramo (Secc 19, solo entre SUS ciclos)
         zonas_t = []
         for lado, key in (("SELL", 'sells'), ("BUY", 'buys')):
             copias = [{**z} for z in t.get(key, [])]
             for z in resolver_concurrencia(copias, lado, precio, verbose=False):
                 zonas_t.append((lado, z))
-        if zonas_t:
-            lineas.append("  Zonas de trabajo del tramo (independientes):")
-            dentro, fuera = [], []
-            for lado, z in sorted(zonas_t, key=lambda x: -max(x[1]['z'])):
-                zmax, zmin = max(z['z']), min(z['z'])
-                accion = "VENTAS" if lado == "SELL" else "COMPRAS"
-                if zmin <= precio <= zmax:
-                    dentro.append((lado, z))
-                    marca = "  <<< PRECIO DENTRO"
+        por_ancla = {}
+        for lado, z in zonas_t:
+            if z.get('ancla') is not None:
+                por_ancla.setdefault(round(z['ancla'], 2), []).append((lado, z))
+
+        def _estado_ciclo(c):
+            ev = c['eval']
+            if ev.get('en_excursion'):
+                return ("TRABAJANDO parte " + ("baja" if t['direction'] == 'BULLISH' else "alta")
+                        if ev.get('zona_origen_en_trabajo') else "en indecisión")
+            if ev.get('activado'):
+                return "ACTIVADO" + (" | EVOLUCIONADO" if ev.get('evolucionado') else "")
+            return f"en alerta (38.2 en {ev['nivel_activacion']:.2f})"
+
+        operables, omitidos = [], []
+        for c in vivos:
+            zonas_c = por_ancla.get(round(c['ancla'], 2), [])
+            if zonas_c:
+                operables.append((c, zonas_c))
+            else:
+                ev = c['eval']
+                if not c.get('operable', True):
+                    motivo = "sub-operable <1%"
+                elif not ev.get('activado') and not ev.get('en_excursion'):
+                    motivo = f"en alerta (38.2 en {ev['nivel_activacion']:.2f})"
+                elif ev.get('en_excursion') and not ev.get('zona_origen_en_trabajo'):
+                    motivo = "en indecisión"
                 else:
-                    dist = (zmin - precio) if precio < zmin else (precio - zmax)
-                    fuera.append((dist, accion, z))
-                    marca = f"  (a {dist:.2f} | {dist / precio:.1%})"
-                lineas.append(f"   [{accion}] {z['name']}: {zmax:.2f} a {zmin:.2f}{marca}")
-            if dentro:
-                lados = sorted({'VENTAS' if l == 'SELL' else 'COMPRAS' for l, _ in dentro})
-                lineas.append(f"  >> EL PRECIO ESTÁ EN ZONA de este tramo: buscar patrón de "
-                              f"{'/'.join(lados)} (3 Pautas, Secc 9).")
-            elif fuera:
-                d, accion, z = min(fuera, key=lambda x: x[0])
-                lineas.append(f"  >> Próxima zona del tramo: {z['name']} ({accion}) "
-                              f"a {d:.2f} ({d / precio:.1%}).")
+                    motivo = "zonas tejidas por la concurrencia"
+                omitidos.append(f"{c['ancla']:.2f} ({motivo})")
+
+        dentro, fuera = [], []
+        if operables:
+            lineas.append(f"  CICLOS CON ZONAS OPERABLES (concurrencia Secc 19 aplicada; "
+                          f"{muertos} CPs muertos):")
+            for c, zonas_c in operables:
+                grado = f"grado {c['grado']:.2f}" if c['grado'] is not None else "macro del tramo"
+                lineas.append(f"   - Ciclo {c['ancla']:.2f} ({c['tf']}, {grado}) {_estado_ciclo(c)}:")
+                for lado, z in sorted(zonas_c, key=lambda x: -max(x[1]['z'])):
+                    zmax, zmin = max(z['z']), min(z['z'])
+                    accion = "VENTAS" if lado == "SELL" else "COMPRAS"
+                    banda = z['name'].rsplit('(', 1)[-1].rstrip(')') if '(' in z['name'] else '?'
+                    if zmin <= precio <= zmax:
+                        dentro.append((lado, z))
+                        marca = "  <<< PRECIO DENTRO"
+                    else:
+                        dist = (zmin - precio) if precio < zmin else (precio - zmax)
+                        fuera.append((dist, accion, z))
+                        marca = f"  (a {dist:.2f} | {dist / precio:.1%})"
+                    lineas.append(f"       [{accion}] {banda}: {zmax:.2f} a {zmin:.2f}{marca}")
         else:
-            lineas.append("  Sin zonas de trabajo propias ahora (ciclos en alerta / partes en trabajo).")
+            lineas.append("  Ningún ciclo del tramo conserva zonas operables ahora.")
+        if omitidos:
+            lineas.append(f"  Omitidos sin zona útil: {', '.join(omitidos)}")
+        if dentro:
+            lados = sorted({'VENTAS' if l == 'SELL' else 'COMPRAS' for l, _ in dentro})
+            lineas.append(f"  >> EL PRECIO ESTÁ EN ZONA de este tramo: buscar patrón de "
+                          f"{'/'.join(lados)} (3 Pautas, Secc 9).")
+        elif fuera:
+            d, accion, z = min(fuera, key=lambda x: x[0])
+            lineas.append(f"  >> Próxima zona del tramo: {z['name']} ({accion}) "
+                          f"a {d:.2f} ({d / precio:.1%}).")
         for a in t.get('alerts', []):
             lineas.append(f"   [ALERTA 38.2] {a['name']}: si toca {a['activacion']:.2f} "
                           f"activa zona de {a['tipo']}")
