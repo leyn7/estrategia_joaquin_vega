@@ -484,6 +484,7 @@ AYUDA = ("Comandos:\n"
          "  agrega SYM — añade a la vigilancia (ej. agrega ETHUSDT)\n"
          "  quita SYM — deja de vigilar\n"
          "  analiza SYM — análisis completo puntual (1-3 min)\n"
+         "  tramos SYM — mapa por tramos independientes (cada muñeca aparte, 1-3 min)\n"
          "  operaciones — operaciones reales registradas (SL/parcial/estado)\n"
          "  ayuda — esto")
 
@@ -530,6 +531,18 @@ def atender_comando(estado, texto):
         estado['watchlist'].remove(arg)
         estado['simbolos'].pop(arg, None)
         return f"{arg} eliminado de la vigilancia."
+    if cmd in ('tramos', 'tramo'):
+        sym = arg or SYMBOL
+        if not _simbolo_valido(sym):
+            return f"{sym} no existe en futuros USDT-M de Binance."
+        mdt_telegram.enviar(estado['chat_id'], f"Armando tramos de {sym}... (1-3 min)")
+        try:
+            from mdt_macro_mapper import generar_mapa, reporte_tramos
+            mapa = generar_mapa(verbose=False, symbol=sym)
+            return reporte_tramos(mapa)
+        except Exception as e:  # noqa: BLE001 — se reporta al operador
+            log.exception("tramos %s", sym)
+            return f"Error armando tramos de {sym}: {e}"
     if cmd in ('analiza', 'analizar', 'analisis') or (cmd.endswith('USDT'.lower()) and not arg):
         sym = arg or cmd.upper()
         if not _simbolo_valido(sym):

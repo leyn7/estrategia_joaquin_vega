@@ -526,7 +526,22 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
                       df_1d.loc[fondo_idx, 'open_time'] + un_dia, "BEARISH", 100))
         rutas.append(("Alcista Post-F", df_1d.loc[fondo_idx, 'open_time'], None, "BULLISH", 96))
 
-    buys, sells, alerts, ciclos_todos = [], [], [], []
+    buys, sells, alerts, ciclos_todos, tramos = [], [], [], [], []
+
+    def _acumular_tramo(nombre, direction, res, buys_r, sells_r, alerts_r):
+        """Guarda la vista independiente del tramo (Secc 2: cada muñeca es un
+        mapa 100% correcto por sí misma — regla usuario 10 jul: "cada tramo sea
+        mirado y operado por separado"). Copias superficiales: la concurrencia
+        GLOBAL muta las zonas del mapa unificado y no debe tocar esta vista."""
+        buys.extend(buys_r)
+        sells.extend(sells_r)
+        alerts.extend(alerts_r)
+        tramos.append({'nombre': nombre, 'direction': direction,
+                       'origen': res['origen'], 'extremo': res['extremo'],
+                       'origen_time': res['origen_time'], 'ciclos': res['ciclos'],
+                       'buys': [{**z} for z in buys_r], 'sells': [{**z} for z in sells_r],
+                       'alerts': list(alerts_r)})
+
     res_prev = fin_prev = dir_prev = peso_prev = None
     for nombre, ini, fin, direction, peso_base in rutas:
         if verbose:
@@ -534,12 +549,14 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
         res = analizar_tramo(nombre, ini, fin, direction, cutoff, verbose, symbol)
         if res is None:
             continue
+        buys_r, sells_r, alerts_r = [], [], []
         for j, c in enumerate(res['ciclos']):
             c['peso'] = peso_base - j
             c['ruta'] = nombre
             c['direction'] = direction
             ciclos_todos.append(c)
-            _registrar_ciclo(c, direction, buys, sells, alerts, verbose)
+            _registrar_ciclo(c, direction, buys_r, sells_r, alerts_r, verbose)
+        _acumular_tramo(nombre, direction, res, buys_r, sells_r, alerts_r)
         res_prev, fin_prev, dir_prev, peso_prev = res, fin, direction, peso_base
 
     # --- Muñecas anidadas (Secc 2, regla usuario 6 jul 2026) ---
@@ -569,13 +586,15 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
                 print(f"   (retroceso {grado_ruta:.2f} < {GRADO_MIN_OPERABLE_PCT:.0%} "
                       f"del precio: fin de las muñecas anidadas)")
             break
+        buys_r, sells_r, alerts_r = [], [], []
         for j, c in enumerate(res['ciclos']):
             c['peso'] = peso_base - j
             c['ruta'] = nombre
             c['direction'] = direction
             c['muneca'] = True  # ruta anidada (Secc 2): sus zonas tejen contra la madre
             ciclos_todos.append(c)
-            _registrar_ciclo(c, direction, buys, sells, alerts, verbose)
+            _registrar_ciclo(c, direction, buys_r, sells_r, alerts_r, verbose)
+        _acumular_tramo(nombre, direction, res, buys_r, sells_r, alerts_r)
         res_prev, dir_prev, peso_prev = res, direction, peso_base
         n_muneca += 1
 
@@ -610,7 +629,78 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
         print(f"\nPRECIO ACTUAL: {current_price:.2f}")
 
     return {'ciclos': ciclos_todos, 'buys': final_buys, 'sells': final_sells,
-            'alerts': alerts, 'precio': current_price}
+            'alerts': alerts, 'precio': current_price, 'tramos': tramos}
+
+
+def reporte_tramos(mapa):
+    """Vista de tramos INDEPENDIENTES (Secc 2 + regla usuario 10 jul: "cada
+    tramo sea mirado y operado por separado; que trabaje sus propios ciclos y
+    puntos de control").
+
+    Por cada tramo (muñeca): sus puntos de control vigentes (vivos) marcando
+    cuáles son operativos, sus zonas de trabajo con concurrencia SOLO INTERNA
+    (las zonas de otros tramos no tejen aquí) y la posición del precio respecto
+    a las zonas de ESE tramo (dentro / la más próxima). Devuelve el texto.
+    """
+    precio = mapa['precio']
+    lineas = [f"MAPA POR TRAMOS INDEPENDIENTES | precio {precio:.2f}"]
+    for t in mapa.get('tramos', []):
+        sentido = "alcista" if t['direction'] == 'BULLISH' else "bajista"
+        lineas.append("")
+        lineas.append(f"=== {t['nombre'].upper()} ({sentido}): {t['origen']:.2f} -> {t['extremo']:.2f} ===")
+        vivos = [c for c in t['ciclos'] if c.get('eval', {}).get('estado') == 'VIVO']
+        muertos = sum(1 for c in t['ciclos'] if c.get('eval', {}).get('estado') == 'MUERTO')
+        if not vivos:
+            lineas.append(f"  Sin puntos de control vivos ({muertos} muertos): sin estructura vigente.")
+            continue
+        lineas.append(f"  Puntos de control vigentes ({len(vivos)} vivos / {muertos} muertos):")
+        for c in vivos:
+            ev = c['eval']
+            grado = f"grado {c['grado']:.2f}" if c['grado'] is not None else "macro del tramo"
+            op = "OPERATIVO" if c.get('operable', True) else "sub-operable <1%"
+            if ev.get('en_excursion'):
+                estado = ("TRABAJANDO parte " + ("baja" if t['direction'] == 'BULLISH' else "alta")
+                          if ev.get('zona_origen_en_trabajo') else "en indecisión (inoperable)")
+            elif ev.get('activado'):
+                estado = "ACTIVADO"
+            else:
+                estado = f"en alerta (se activa en {ev['nivel_activacion']:.2f})"
+            evo = " | EVOLUCIONADO" if ev.get('evolucionado') else ""
+            lineas.append(f"   - {c['ancla']:.2f} ({c['tf']}, {grado}) [{op}] {estado}{evo}")
+        # Zonas del tramo: concurrencia interna, independiente de otros tramos
+        zonas_t = []
+        for lado, key in (("SELL", 'sells'), ("BUY", 'buys')):
+            copias = [{**z} for z in t.get(key, [])]
+            for z in resolver_concurrencia(copias, lado, precio, verbose=False):
+                zonas_t.append((lado, z))
+        if zonas_t:
+            lineas.append("  Zonas de trabajo del tramo (independientes):")
+            dentro, fuera = [], []
+            for lado, z in sorted(zonas_t, key=lambda x: -max(x[1]['z'])):
+                zmax, zmin = max(z['z']), min(z['z'])
+                accion = "VENTAS" if lado == "SELL" else "COMPRAS"
+                if zmin <= precio <= zmax:
+                    dentro.append((lado, z))
+                    marca = "  <<< PRECIO DENTRO"
+                else:
+                    dist = (zmin - precio) if precio < zmin else (precio - zmax)
+                    fuera.append((dist, accion, z))
+                    marca = f"  (a {dist:.2f} | {dist / precio:.1%})"
+                lineas.append(f"   [{accion}] {z['name']}: {zmax:.2f} a {zmin:.2f}{marca}")
+            if dentro:
+                lados = sorted({'VENTAS' if l == 'SELL' else 'COMPRAS' for l, _ in dentro})
+                lineas.append(f"  >> EL PRECIO ESTÁ EN ZONA de este tramo: buscar patrón de "
+                              f"{'/'.join(lados)} (3 Pautas, Secc 9).")
+            elif fuera:
+                d, accion, z = min(fuera, key=lambda x: x[0])
+                lineas.append(f"  >> Próxima zona del tramo: {z['name']} ({accion}) "
+                              f"a {d:.2f} ({d / precio:.1%}).")
+        else:
+            lineas.append("  Sin zonas de trabajo propias ahora (ciclos en alerta / partes en trabajo).")
+        for a in t.get('alerts', []):
+            lineas.append(f"   [ALERTA 38.2] {a['name']}: si toca {a['activacion']:.2f} "
+                          f"activa zona de {a['tipo']}")
+    return '\n'.join(lineas)
 
 
 def ancla_viva(mapa, ancla, tol=1e-6):

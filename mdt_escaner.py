@@ -11,7 +11,7 @@ disparar cualquier entrada (candado mapa->escáner).
 import pandas as pd
 from mdt_config import SYMBOL, TF_PATRON, TF_MINUTOS, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
-from mdt_macro_mapper import generar_mapa, _descargar, _ahora, ancla_viva
+from mdt_macro_mapper import generar_mapa, reporte_tramos, _descargar, _ahora, ancla_viva
 
 VELAS_ESCANEO = 1500  # ventana máxima de velas de la TF del patrón
 
@@ -196,7 +196,14 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Análisis MDT completo de un símbolo")
     ap.add_argument("--symbol", default=SYMBOL, help="símbolo de futuros USDT-M (ej. ETHUSDT)")
     ap.add_argument("--cutoff", default=None, help="instante UTC para time-travel (default: ahora)")
+    ap.add_argument("--tramos", action="store_true",
+                    help="vista de tramos independientes (cada muñeca con sus propios "
+                         "puntos de control y zonas, sin concurrencia entre tramos)")
     args = ap.parse_args()
     _cutoff = pd.Timestamp(args.cutoff) if args.cutoff else None
-    _mapa = generar_mapa(_cutoff, verbose=True, symbol=args.symbol.upper())
-    escanear_mapa(_cutoff, mapa=_mapa, verbose=True, symbol=args.symbol.upper())
+    if args.tramos:
+        _mapa = generar_mapa(_cutoff, verbose=False, symbol=args.symbol.upper())
+        print(reporte_tramos(_mapa))
+    else:
+        _mapa = generar_mapa(_cutoff, verbose=True, symbol=args.symbol.upper())
+        escanear_mapa(_cutoff, mapa=_mapa, verbose=True, symbol=args.symbol.upper())
