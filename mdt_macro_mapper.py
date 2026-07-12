@@ -402,9 +402,18 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
              "operativa_desde": ev.get('hora_activacion')}
     # Anulación de cada zona (Secc 4/17): el siguiente nivel fibo que la mata.
     # Baja -> extensión 138.2 | Media -> el origen (100%) | Alta -> extensión -38.2.
-    # TP (Secc 7.2): "la zona contraria más alejada" DEL MISMO CICLO — para una
-    # señal de ventas, la Zona Baja del ciclo; para compras, su Zona Alta.
+    # TP de las MEDIAS (Secc 7.2): "la zona contraria más alejada" DEL MISMO CICLO.
+    # TP de las zonas del LADO DEL FIN (Alta alcista / Baja bajista — el
+    # contra-movimiento; regla usuario 12 jul): al ir la operación, el precio
+    # activa la medida nueva del ciclo tocando su 38.2 — el objetivo es la
+    # MEDIA (zona 61.8) de esa medida que se forma (vigente o candidata),
+    # dinámica. La zona contraria lejana es el "máximo potencial" del mapa,
+    # no el TP operativo. (Caso M5: venta EE 582.05 -> la caída activó la
+    # medida 560.85->583.42 en 574.80 y el objetivo era su Media 569.47-565.16;
+    # el precio llegó a 570.52.)
     origen, fin, imp = z['origen'], z['fin'], z['impulse']
+    fin_tp = ev.get('fin_candidato') if ev.get('fin_candidato') is not None else ev['fin_vigente']
+    media_medida_nueva = calc_zones(ev['origen_vigente'], fin_tp, direction)['MEDIA']
     if direction == "BULLISH":
         anul = {"BAJA": origen - imp * 0.382, "MEDIA": origen, "ALTA": fin + imp * 0.382}
         buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso,
@@ -413,11 +422,11 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
             buys.append({"name": f"{nombre} (Media)", "z": z['MEDIA'], "peso": peso,
                          "nivel_anulacion": anul["MEDIA"], "tp_zona": z['ALTA'], **extra})
         sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso,
-                      "nivel_anulacion": anul["ALTA"], "tp_zona": z['BAJA'], **extra})
+                      "nivel_anulacion": anul["ALTA"], "tp_zona": media_medida_nueva, **extra})
     else:
         anul = {"ALTA": origen + imp * 0.382, "MEDIA": origen, "BAJA": fin - imp * 0.382}
         buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso,
-                     "nivel_anulacion": anul["BAJA"], "tp_zona": z['ALTA'], **extra})
+                     "nivel_anulacion": anul["BAJA"], "tp_zona": media_medida_nueva, **extra})
         sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso,
                       "nivel_anulacion": anul["ALTA"], "tp_zona": z['BAJA'], **extra})
         if not ev['media_muerta']:
