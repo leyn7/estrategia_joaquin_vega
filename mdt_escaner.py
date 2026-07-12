@@ -159,10 +159,18 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
                 hora_h = dh.get('hora_gatillo') or dh.get('hora_validacion') or dh.get('pauta1_time')
                 hora_h_txt = f" @ {hora_h}" if hora_h is not None else ""
                 print(f"      trabajo {k}: {h['estado']}{hora_h_txt} — {h['mensaje']}")
-            hora = res.get('detalles', {}).get('hora_gatillo')
+            d_res = res.get('detalles', {})
+            hora = d_res.get('hora_gatillo')
             hora_txt = f" [gatillo: {hora}]" if hora is not None else ""
+            lleg = d_res.get('calidad_llegada')
+            lleg_txt = ""
+            if lleg == "BARRIDO":
+                lleg_txt = (f" [LLEGADA: BARRIDO ⚡ mecha {d_res.get('mecha_vs_cuerpo')}x, "
+                            f"{d_res.get('velas_visita')} vela(s)]")
+            elif lleg == "LENTA":
+                lleg_txt = f" [LLEGADA: LENTA — {d_res.get('cierres_dentro')} cierres dentro]"
             pref = f"trabajo {len(previos) + 1} (vigente): " if previos else ""
-            print(f"      {pref}{res['estado']}: {res['mensaje']}{hora_txt}{marca}")
+            print(f"      {pref}{res['estado']}: {res['mensaje']}{hora_txt}{lleg_txt}{marca}")
             op = e.get('operacion')
             if op:
                 veredicto = (f"CUMPLE 1:{RATIO_MINIMO:.0f}" if op['cumple_ratio']

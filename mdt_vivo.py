@@ -96,6 +96,9 @@ ESTADOS_PROFUNDO = ("ENTRADA_PROFUNDA_ESPERANDO", "P3_CORTA_GATILLO",
 NOTIF_ACTIVACION = os.environ.get('MDT_NOTIF_ACTIVACION', '0') == '1'
 NOTIF_ZONA = os.environ.get('MDT_NOTIF_ZONA', '0') == '1'
 NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'profundo').lower()
+# MDT_NOTIF_LLEGADA=barrido -> solo notifica patrones nacidos de una llegada
+# BARRIDO (la mechita: toca y sale). Vacío = notifica todas (marcadas).
+NOTIF_LLEGADA = os.environ.get('MDT_NOTIF_LLEGADA', '').lower()
 FMT_ESTADO = 4  # versión del formato de firma; un cambio re-basa sin ráfaga
 
 # Gatillos EJECUTADOS = entrada a mercado real. Se persisten como OPERACIONES
@@ -166,6 +169,12 @@ def _texto_escaneo(e):
     txt = (f"{res['estado']} en {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f}\n"
            f"  ciclo {e['tf_ciclo']} (ancla {e['ancla']:.2f}) -> patrón {e['tf_patron']}\n"
            f"  {res['mensaje']}")
+    lleg = d.get('calidad_llegada')
+    if lleg == "BARRIDO":
+        txt += (f"\n  ⚡ LLEGADA BARRIDO: tocó y salió (mecha {d.get('mecha_vs_cuerpo')}x "
+                f"el cuerpo, {d.get('velas_visita')} vela(s), 0 cierres dentro)")
+    elif lleg == "LENTA":
+        txt += f"\n  🐌 llegada lenta (camping): {d.get('cierres_dentro')} cierres dentro"
     if hora:
         txt += f"\n  hora: {hora}"
     return txt + _texto_operacion(e.get('operacion'))
@@ -442,6 +451,8 @@ def detectar_eventos(sym, resultado, mem):
             interesa = estado in ESTADOS_OPERABLES or estado in ESTADOS_HITO
         else:  # 'todos'
             interesa = True
+        if interesa and NOTIF_LLEGADA == 'barrido':
+            interesa = res.get('detalles', {}).get('calidad_llegada') == 'BARRIDO'
         # Firma = solo el estado. La zona (su ancla) ya está en la clave `k`, así
         # que un mismo Engaño Profundo se avisa UNA vez y no se repite aunque la
         # zona oscile su borde vela a vela; solo re-avisa si el patrón murió (otro
