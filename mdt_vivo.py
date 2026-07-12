@@ -1,17 +1,24 @@
 # -*- coding: utf-8 -*-
-"""Bucle en vivo del bot MDT: escaneo periódico + eventos + Telegram.
+"""Bucle en vivo del bot MDT: escaneo periódico (global + tramos) + Telegram.
 
-Eventos que se notifican (una sola vez cada uno, con dedup por estado):
-  1. ACTIVACIÓN 38.2: un ciclo del mapa pasa de EN ALERTA a ACTIVADO.
-  2. LLEGADA A ZONA: el precio entra en una zona operativa final (no-contexto).
-  3. PATRÓN: la zona cambia a un estado operable o a un hito (carencia viva,
-     patrón muerto) — con ancla, TF y las 4 Informaciones si es accionable.
+Eventos que se notifican (dedup por firma; filtros MDT_NOTIF_* en .env):
+  1. ACTIVACIÓN 38.2 (apagado por defecto: MDT_NOTIF_ACTIVACION=1).
+  2. LLEGADA A ZONA (apagado por defecto: MDT_NOTIF_ZONA=1).
+  3. PATRÓN: por defecto solo el Engaño Profundo (Entrada Profunda + Engaño
+     Extremo), con calidad de llegada (BARRIDO/LENTA) y las 4 Informaciones.
+     MDT_NOTIF_PATRON=operables|todos amplía; MDT_NOTIF_LLEGADA=barrido filtra.
+  4. DUELO entre tramos: patrones concurrentes de tramos distintos — gana la
+     calidad del patrón (siempre se notifica).
+  5. OPERACIONES REALES (siempre): gatillos ejecutados persistidos como hechos
+     + gestión Secc 20 (parcial/breakeven/SL/TP) con velas reales.
 
-Comandos por Telegram: lista | agrega SYM | quita SYM | analiza SYM | ayuda.
-El primer chat que escriba queda vinculado (si MDT_TG_CHAT no está fijado).
+Comandos por Telegram: lista | agrega SYM | quita SYM | analiza SYM |
+tramos SYM | operaciones | ayuda. El primer chat que escriba queda vinculado
+(si MDT_TG_CHAT no está fijado).
 
-Estado persistente en JSON (MDT_ESTADO, default ./estado_vivo.json): watchlist,
-offset de Telegram, chat vinculado y firmas de eventos ya notificados.
+Estado persistente en JSON (MDT_ESTADO, default ./estado_vivo.json) con backup
+.bak y poda de firmas muertas: watchlist, offset de Telegram, chat vinculado,
+firmas notificadas y operaciones reales.
 Uso local de prueba (sin token, mensajes a consola):
   python mdt_vivo.py --una-pasada
 """
@@ -29,7 +36,7 @@ import requests
 
 import mdt_data
 import mdt_telegram
-from mdt_config import SYMBOL, RATIO_MINIMO, PARCIAL_R, ZONA_MAX_OPERABLE_PCT
+from mdt_config import SYMBOL, RATIO_MINIMO, MAX_OPS_DIA, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
 
 logging.basicConfig(level=logging.INFO,
@@ -80,7 +87,7 @@ def get_klines_vivo(symbol=SYMBOL, interval="1d", start_time=None):
 mdt_data.get_binance_klines = get_klines_vivo
 import mdt_macro_mapper  # noqa: E402
 mdt_macro_mapper.get_binance_klines = get_klines_vivo
-from mdt_escaner import escanear_mapa, escanear_tramos, ESTADOS_OPERABLES  # noqa: E402
+from mdt_escaner import escanear_completo as _escanear_completo, ESTADOS_OPERABLES  # noqa: E402
 
 # Hitos no-operables que sí se notifican (elección del usuario: operables + hitos)
 ESTADOS_HITO = ("ANULADO_POR_CARENCIA", "ROTO_POR_DOBLE_TOQUE", "ROTO_POR_STOP_LOSS",
@@ -106,20 +113,9 @@ FMT_ESTADO = 5  # versión del formato de firma; un cambio re-basa sin ráfaga
 
 
 def escanear_completo(sym, cutoff=None):
-    """Escaneo global + escaneo por tramos, fusionados para el detector de
-    eventos: las zonas que solo existen en la vista por tramos (las que la
-    concurrencia global absorbió — caso Alta del M5) entran etiquetadas con su
-    tramo; las compartidas no se duplican (manda la global). Los duelos entre
-    tramos (regla usuario 12 jul) viajan en resultado['duelos']."""
-    resultado = escanear_mapa(cutoff=cutoff, verbose=False, symbol=sym)
-    tr = escanear_tramos(cutoff=cutoff, mapa=resultado['mapa'], verbose=False, symbol=sym)
-    vistos = {(e['lado'], round(e['ancla'], 2), e['rango']) for e in resultado['escaneos']
-              if e.get('ancla') is not None}
-    extras = [e for e in tr['escaneos']
-              if (e['lado'], round(e['ancla'], 2), e['rango']) not in vistos]
-    resultado['escaneos'] = resultado['escaneos'] + extras
-    resultado['duelos'] = tr['duelos']
-    return resultado
+    """Escaneo global + tramos fusionados (vive en mdt_escaner: misma lente
+    para el bot en vivo y el backtest)."""
+    return _escanear_completo(cutoff=cutoff, verbose=False, symbol=sym)
 
 # Gatillos EJECUTADOS = entrada a mercado real. Se persisten como OPERACIONES
 # (hechos): la cadena de patrones es sin-estado y al re-parsear con velas
@@ -318,6 +314,14 @@ def actualizar_operaciones(sym, resultado, mem):
         k = f"{op['lado']}|{op['ancla']:.2f}|{op['patron']}|{op['entrada']:.2f}"
         if k not in ops:
             ops[k] = {**op, 'fase': None}
+            # Límite operativo diario (Secc 1): el bot no oculta hechos, pero
+            # avisa cuando los gatillos del día ya coparon el plan
+            hoy = str(to_cot(pd.Timestamp.now(tz='UTC')).date())
+            del_dia = sum(1 for o in ops.values()
+                          if str(to_cot(pd.Timestamp(o['hora_gatillo']).tz_localize('UTC')).date()) == hoy)
+            if del_dia > MAX_OPS_DIA:
+                eventos.append(f"⚠️ {sym} | LÍMITE DIARIO (Secc 1): ya van {del_dia} gatillos "
+                               f"ejecutados hoy (máx {MAX_OPS_DIA}). No operar más por hoy.")
     # 2) seguir cada operación no cerrada
     for k, op in list(ops.items()):
         if op.get('fase') in ('SL', 'BE', 'TP'):

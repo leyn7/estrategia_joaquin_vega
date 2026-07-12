@@ -1,8 +1,10 @@
 """Corre mdt_macro_mapper.py con time-travel (default: 30 jun 2026 23:21 COT).
 Uso: python _backtest_mapper.py [cutoff_utc_iso]
 Trunca toda descarga al cutoff y reconstruye la vela parcial en curso desde 1m."""
+import os
 import sys
-sys.path.insert(0, r"C:\Users\leyner\Documents\proyectos\trading\estrategia_joaquin_vega")
+_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _DIR)
 import runpy
 import requests
 import time as _time
@@ -53,5 +55,4 @@ def patched(symbol="BNBUSDT", interval="1d", start_time=None):
 
 mdt_data.get_binance_klines = patched
 
-runpy.run_path(r"C:\Users\leyner\Documents\proyectos\trading\estrategia_joaquin_vega\mdt_macro_mapper.py",
-               run_name="__main__")
+runpy.run_path(os.path.join(_DIR, "mdt_macro_mapper.py"), run_name="__main__")

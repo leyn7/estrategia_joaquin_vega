@@ -299,6 +299,24 @@ def escanear_tramos(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     return {'mapa': mapa, 'escaneos': escaneos, 'duelos': duelos}
 
 
+def escanear_completo(cutoff=None, verbose=False, symbol=SYMBOL):
+    """Escaneo global + escaneo por tramos, fusionados: las zonas que solo
+    existen en la vista por tramos (las que la concurrencia global absorbió —
+    caso Alta del M5) entran etiquetadas con su tramo; las compartidas no se
+    duplican (manda la global). Los duelos entre tramos (regla usuario 12 jul)
+    viajan en resultado['duelos']. Lo usan el bot en vivo y el backtest —
+    misma lente, mismos números."""
+    resultado = escanear_mapa(cutoff=cutoff, verbose=verbose, symbol=symbol)
+    tr = escanear_tramos(cutoff=cutoff, mapa=resultado['mapa'], verbose=verbose, symbol=symbol)
+    vistos = {(e['lado'], round(e['ancla'], 2), e['rango']) for e in resultado['escaneos']
+              if e.get('ancla') is not None}
+    extras = [e for e in tr['escaneos']
+              if (e['lado'], round(e['ancla'], 2), e['rango']) not in vistos]
+    resultado['escaneos'] = resultado['escaneos'] + extras
+    resultado['duelos'] = tr['duelos']
+    return resultado
+
+
 def revalidar_setup(escaneo, cutoff=None, symbol=SYMBOL):
     """Candado mapa->escáner (Regla 3): ¿el ancla del setup sigue viva en un mapa
     fresco? Si el ancla fue enterrada (desgrane) o murió (138.2/evolución), el

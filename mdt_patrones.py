@@ -264,7 +264,7 @@ def _vigilar_escape(df, HI, LO, zmax, anulacion, r, palabras, desde, etiqueta, h
     return ultimo
 
 
-def _calidad_llegada(df, HI, LO, p1_idx, zmin, direction):
+def _calidad_llegada(df, HI, p1_idx, zmin, direction):
     """Clasifica la FORMA de la llegada a la zona en la visita que contiene a P1
     (regla usuario 11 jul: "quiero operar zonas que me den esa mechita — toca
     ese máximo y sale"). Caso patrón: mechita del 10 jul (mecha 6x el cuerpo,
@@ -388,7 +388,7 @@ def evaluate_peak_as_p1(df, p1_idx, zona_max, zona_min, direction, nivel_anulaci
         "fibo_1618": r(fibo_1618),
         "mitad_zona": r(mitad_zona),
         "proporcional": proporcional,
-        **_calidad_llegada(df, HI, LO, p1_idx, zmin, direction)
+        **_calidad_llegada(df, HI, p1_idx, zmin, direction)
     }
 
     # Escape de proyección (Sección 16): basta el 161.8 fuera O al ras del límite. Irreversible.
