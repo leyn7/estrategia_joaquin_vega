@@ -31,9 +31,17 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
         precio se aleja del extremo el 38.2% de esa nueva medida, el ciclo viejo
         muere y el mayor toma su lugar: re-ancla en el extremo, zonas nuevas,
         ACTIVADO ("el ciclo azul se muere y pasamos a tener un ciclo mayor").
-      - Activación: tocar el 38.2 del fibo vigente. Un nuevo extremo del impulso
-        re-dibuja el fibo y exige tocar el nuevo 38.2 (misma evolución, mismo
-        ancla: "movimiento mayor desde ese origen").
+      - Activación: tocar el 38.2 del fibo vigente. ANTES de la activación, un
+        nuevo extremo re-dibuja el fibo y desliza el 38.2 objetivo.
+      - TRABAJO DE LA ZONA ALTA (Secc 4/6, regla usuario 11 jul): DESPUÉS de la
+        activación la medida del episodio queda FIJA (fin_act). El precio por
+        encima del fin ES el trabajo de la Zona Alta (Baja en bajista) — la
+        manipulación que esa zona existe para capturar (caso real: la mechita
+        578.81 del 10 jul desactivaba el ciclo y la Alta era intrabajable). Un
+        extremo nuevo abre una MEDIDA CANDIDATA (fin corrido) que solo nace al
+        tocar SU 38.2 ("si llegaba al 38.2 se activaba el ciclo con sus nuevas
+        zonas"); la medida vigente solo muere si el precio toca la anulación de
+        su Alta (fin_act + 38.2% del impulso — el mismo nivel del mapa).
       - Zona media: muere si el precio toca el 100% (origen); la evolución la
         restaura fresca.
 
@@ -49,6 +57,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
 
     origen_v = m * origen
     fin_v = float('-inf')
+    fin_act = None   # medida FIJA del episodio activado (None = sin activar)
     exc_min = None
     hora_exc = None
     activado = False
@@ -85,6 +94,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
                     hora_exc = None
                     evolucionado = True
                     activado = True
+                    fin_act = fin_v
                     hora_act = times[i]
                     media_muerta = False
                 continue
@@ -98,29 +108,56 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
             if not activado:
                 if (lo <= act) or (evolucionado and hi >= act):
                     activado = True
+                    fin_act = fin_v
                     hora_act = times[i]
-            elif lo <= origen_v:
-                media_muerta = True
+            else:
+                if lo <= origen_v:
+                    media_muerta = True
+                # Medida candidata mayor (extremo nuevo tras la activación): nace
+                # al tocar SU 38.2 — "se activa el ciclo con sus nuevas zonas"
+                # (regla usuario 11 jul). Hasta entonces, la medida vigente manda.
+                if fin_v > fin_act and lo <= act:
+                    fin_act = fin_v
+                    hora_act = times[i]
+                    media_muerta = False
 
         if hi > fin_v:
             if fin_v > origen_v:
-                # Nuevo extremo del impulso: el fibo se re-dibuja (misma ancla,
-                # medida mayor) y exige tocar el nuevo 38.2
-                activado = False
-                hora_act = None
-                media_muerta = False
+                if not activado:
+                    # Pre-activación: el fibo se re-dibuja (misma ancla, medida
+                    # mayor) y el 38.2 objetivo se desliza
+                    hora_act = None
+                    media_muerta = False
+                else:
+                    # Post-activación (Secc 4/6): el precio por encima del fin es
+                    # el TRABAJO DE LA ZONA ALTA de la medida vigente — no re-mide
+                    # ni desactiva. El episodio solo muere si toca la anulación de
+                    # la Alta (fin_act + 38.2% del impulso vigente).
+                    imp_act = fin_act - origen_v
+                    if hi >= fin_act + imp_act * 0.382:
+                        activado = False
+                        fin_act = None
+                        hora_act = None
+                        media_muerta = False
             fin_v = hi
 
     if fin_v <= origen_v:
         return {'estado': 'SIN_IMPULSO', 'activado': False, 'zonas': None,
                 'origen_vigente': m * origen_v, 'fin_vigente': None}
 
-    zonas = calc_zones(m * origen_v, m * fin_v, direction)
+    # Zonas de la medida VIGENTE: la del episodio activado (fija) o, sin activar,
+    # la del fibo corrido (cuyo 38.2 es el objetivo de activación).
+    fin_zonas = fin_act if (activado and fin_act is not None) else fin_v
+    zonas = calc_zones(m * origen_v, m * fin_zonas, direction)
     res = {'estado': 'VIVO', 'activado': activado, 'hora_activacion': hora_act,
            'evolucionado': evolucionado, 'en_excursion': exc_min is not None,
            'media_muerta': media_muerta, 'origen_vigente': m * origen_v,
-           'fin_vigente': m * fin_v, 'zonas': zonas,
+           'fin_vigente': m * fin_zonas, 'zonas': zonas,
            'nivel_activacion': zonas['activacion']}
+    if activado and fin_act is not None and fin_v > fin_act:
+        # Extremo nuevo tras la activación: medida candidata pendiente de nacer
+        res['fin_candidato'] = m * fin_v
+        res['activacion_candidata'] = m * (fin_v - (fin_v - origen_v) * 0.382)
     if exc_min is not None:
         # Clasificación de la excursión por la posición ACTUAL del precio:
         # dentro del 19.1% = trabajando la zona del origen (operativa);

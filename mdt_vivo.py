@@ -96,7 +96,7 @@ ESTADOS_PROFUNDO = ("ENTRADA_PROFUNDA_ESPERANDO", "P3_CORTA_GATILLO",
 NOTIF_ACTIVACION = os.environ.get('MDT_NOTIF_ACTIVACION', '0') == '1'
 NOTIF_ZONA = os.environ.get('MDT_NOTIF_ZONA', '0') == '1'
 NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'profundo').lower()
-FMT_ESTADO = 3  # versión del formato de firma; un cambio re-basa sin ráfaga
+FMT_ESTADO = 4  # versión del formato de firma; un cambio re-basa sin ráfaga
 
 # Gatillos EJECUTADOS = entrada a mercado real. Se persisten como OPERACIONES
 # (hechos): la cadena de patrones es sin-estado y al re-parsear con velas

@@ -381,7 +381,19 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
 
     if verbose:
         media_txt = " | media MUERTA (tocó el 100%)" if ev['media_muerta'] else ""
-        print(f"{etiqueta} -> {detalle} | ACTIVADO ({ev['hora_activacion']}){media_txt}")
+        cand_txt = (f" | medida candidata hasta {ev['fin_candidato']:.2f} "
+                    f"(nace en {ev['activacion_candidata']:.2f})"
+                    if ev.get('fin_candidato') is not None else "")
+        print(f"{etiqueta} -> {detalle} | ACTIVADO ({ev['hora_activacion']}){media_txt}{cand_txt}")
+    if ev.get('fin_candidato') is not None:
+        # Extremo nuevo tras la activación (Secc 4/6): la medida vigente sigue
+        # operativa (el precio arriba del fin es el trabajo de la Alta); la
+        # medida candidata nace si el precio toca SU 38.2 — va como alerta.
+        tipo_cand = "COMPRAS" if direction == "BULLISH" else "VENTAS"
+        z_cand = calc_zones(ev['origen_vigente'], ev['fin_candidato'], direction)
+        alerts.append({'name': f"{nombre} (nueva medida {ev['fin_candidato']:.2f})",
+                       'activacion': ev['activacion_candidata'],
+                       'zona_alerta': z_cand['MEDIA'], 'tipo': tipo_cand})
     peso = c['peso']
     # Las zonas existen desde la ACTIVACIÓN del ciclo (tocó su 38.2, Secc 3): el
     # escáner de patrones solo debe mirar velas desde entonces (Secc 13, checklist 1:
