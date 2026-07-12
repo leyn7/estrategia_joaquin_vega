@@ -19,6 +19,7 @@ import argparse
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 
@@ -38,6 +39,8 @@ log = logging.getLogger('mdt.vivo')
 INTERVALO = int(os.environ.get('MDT_INTERVALO', '300'))  # segundos entre escaneos
 RUTA_ESTADO = os.environ.get('MDT_ESTADO', os.path.join(
     os.path.dirname(os.path.abspath(__file__)), 'estado_vivo.json'))
+PODA_ESCANEOS = 288       # ~24h a 5 min: firmas ausentes tanto tiempo se purgan
+MAX_OPS_CERRADAS = 30     # operaciones cerradas retenidas en el estado
 
 # ---------------------------------------------------------------------------
 # Caché incremental de velas: sin ella cada escaneo re-descargaría meses de 1m.
@@ -125,19 +128,35 @@ def escanear_completo(sym, cutoff=None):
 # Entrada Profunda re-leyó el episodio). La operación registrada conserva sus
 # datos reales (entrada/SL/TP originales) y se sigue con velas, pase lo que
 # pase con el re-parseo. Sobrevive reinicios (estado_vivo.json).
-ESTADOS_EJECUTADOS = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO",
-                      "DT_IMPULSO_GATILLO", "EE_GATILLO")
+from mdt_gestion import ESTADOS_EJECUTADOS, entrada_de_resultado, gestionar  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
 # Estado persistente
 # ---------------------------------------------------------------------------
 def cargar_estado():
-    if os.path.exists(RUTA_ESTADO):
-        with open(RUTA_ESTADO, encoding='utf-8') as f:
-            e = json.load(f)
-    else:
+    """Carga el estado con recuperación: si el JSON principal está corrupto se
+    intenta el .bak (las operaciones reales son hechos que no se pueden perder).
+    Tras una carga buena, el principal se respalda a .bak."""
+    e = None
+    for ruta in (RUTA_ESTADO, RUTA_ESTADO + '.bak'):
+        if not os.path.exists(ruta):
+            continue
+        try:
+            with open(ruta, encoding='utf-8') as f:
+                e = json.load(f)
+            if ruta.endswith('.bak'):
+                log.warning("estado principal ilegible: RECUPERADO desde %s", ruta)
+            break
+        except (json.JSONDecodeError, OSError):
+            log.exception("no se pudo leer %s", ruta)
+    if e is None:
         e = {}
+    elif os.path.exists(RUTA_ESTADO):
+        try:
+            shutil.copy2(RUTA_ESTADO, RUTA_ESTADO + '.bak')
+        except OSError:
+            log.exception("no se pudo escribir el backup del estado")
     e.setdefault('chat_id', mdt_telegram.CHAT_ENV or '')
     e.setdefault('offset', 0)
     e.setdefault('watchlist', [SYMBOL])
@@ -233,73 +252,33 @@ def resumen_analisis(sym, resultado):
 def _op_de_escaneo(e):
     """Extrae los HECHOS de un gatillo ejecutado (o None): entrada, SL original,
     TP del ciclo y hora — lo que el operador necesita aunque el re-parseo de la
-    cadena luego pierda este trabajo."""
+    cadena luego pierda este trabajo. La extracción vive en mdt_gestion (única
+    fuente de verdad compartida con escáner y backtest)."""
     res = e['resultado']
     if res['estado'] not in ESTADOS_EJECUTADOS:
         return None
-    d = res.get('detalles', {})
-    hora = d.get('hora_gatillo')
-    entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
-               or d.get('entrada_dt_618'))
-    if entrada is None and res['estado'].startswith('EE_'):
-        entrada = e['rango'][0] if e['lado'] == 'SELL' else e['rango'][1]
-    sl = d.get('stop_loss', d.get('extremo_escape'))
+    hechos = entrada_de_resultado(res, e['lado'], e['rango'])
     tp = e.get('tp_zona')
-    if hora is None or entrada is None or sl is None or tp is None:
+    if hechos is None or tp is None:
         return None
+    entrada, sl, hora = hechos
     return {'zona': e['zona'], 'lado': e['lado'], 'patron': res['estado'],
             'tf': e['tf_patron'], 'ancla': float(e['ancla']),
-            'entrada': round(float(entrada), 4), 'sl': round(float(sl), 4),
+            'entrada': round(entrada, 4), 'sl': round(sl, 4),
             'tp_zona': [round(float(max(tp)), 4), round(float(min(tp)), 4)],
             'hora_gatillo': str(_naive(hora))}
 
 
 def _seguir_operacion(sym, op):
     """Sigue la operación con velas reales desde su gatillo (gestión Secc 20).
-
-    Determinista desde los hechos persistidos: SL tocado -> SL (-1R). Si el
-    objetivo supera 1:3, parcial OBLIGATORIO a la mitad del objetivo (mín 1:2):
-    mitad fuera + stop a BREAKEVEN; luego breakeven cierra el resto en lo
-    asegurado y el TP completa. Conservador vela a vela (el lado malo primero).
-    """
-    lado, entrada, sl = op['lado'], op['entrada'], op['sl']
-    riesgo = abs(sl - entrada)
-    if riesgo <= 0:
-        return None
+    Determinista desde los hechos persistidos; la caminata vive en
+    mdt_gestion.gestionar (única fuente de verdad compartida con el backtest)."""
+    lado = op['lado']
     tp = max(op['tp_zona']) if lado == 'SELL' else min(op['tp_zona'])
-    ratio = abs(entrada - tp) / riesgo
-    signo = -1.0 if lado == 'SELL' else 1.0
-    nivel_parcial = None
-    ratio_parcial = 0.0
-    if ratio > RATIO_MINIMO:
-        ratio_parcial = max(PARCIAL_R, ratio / 2.0)
-        nivel_parcial = entrada + signo * ratio_parcial * riesgo
     hora = pd.Timestamp(op['hora_gatillo'])
     df = get_klines_vivo(sym, op['tf'], hora.tz_localize('UTC'))
     velas = df[df['open_time'] > hora]
-    base = {'ratio': ratio, 'nivel_parcial': nivel_parcial, 'tp': tp}
-    fase, r_aseg = 'ABIERTA', 0.0
-    for v in velas.itertuples():
-        if fase == 'ABIERTA':
-            if (v.high >= sl) if lado == 'SELL' else (v.low <= sl):
-                return {**base, 'fase': 'SL', 'r': -1.0, 'sl_actual': sl}
-            if nivel_parcial is not None and \
-                    ((v.low <= nivel_parcial) if lado == 'SELL' else (v.high >= nivel_parcial)):
-                fase, r_aseg = 'PARCIAL', 0.5 * ratio_parcial
-            elif nivel_parcial is None and \
-                    ((v.low <= tp) if lado == 'SELL' else (v.high >= tp)):
-                return {**base, 'fase': 'TP', 'r': ratio, 'sl_actual': sl}
-        else:
-            if (v.high >= entrada) if lado == 'SELL' else (v.low <= entrada):
-                return {**base, 'fase': 'BE', 'r': r_aseg, 'sl_actual': entrada}
-            if (v.low <= tp) if lado == 'SELL' else (v.high >= tp):
-                return {**base, 'fase': 'TP', 'r': r_aseg + 0.5 * ratio, 'sl_actual': entrada}
-    ult = float(velas['close'].iloc[-1]) if len(velas) else entrada
-    r_flot = ((entrada - ult) if lado == 'SELL' else (ult - entrada)) / riesgo
-    if fase == 'PARCIAL':
-        return {**base, 'fase': 'PARCIAL', 'r': r_aseg + 0.5 * r_flot,
-                'r_asegurada': r_aseg, 'sl_actual': entrada, 'precio': ult}
-    return {**base, 'fase': 'ABIERTA', 'r': r_flot, 'sl_actual': sl, 'precio': ult}
+    return gestionar(velas, lado, op['entrada'], op['sl'], tp)
 
 
 def _texto_op_real(op, s):
@@ -364,6 +343,12 @@ def actualizar_operaciones(sym, resultado, mem):
         op['fase'] = s['fase']
         if s['fase'] in ('SL', 'BE', 'TP'):
             op['r_final'] = round(s['r'], 2)
+    # Retención: las cerradas más viejas se purgan (auditoría 12 jul)
+    cerradas = [k for k, o in ops.items() if o.get('fase') in ('SL', 'BE', 'TP')]
+    if len(cerradas) > MAX_OPS_CERRADAS:
+        cerradas.sort(key=lambda k: str(ops[k].get('hora_gatillo', '')))
+        for k in cerradas[:-MAX_OPS_CERRADAS]:
+            ops.pop(k)
     return eventos
 
 
@@ -411,6 +396,8 @@ def detectar_eventos(sym, resultado, mem):
     eventos = []
     ahora = pd.Timestamp.now(tz='UTC').tz_localize(None)
 
+    vivas = {'activados': set(), 'en_zona': set(), 'patron': set(), 'duelos': set()}
+
     # 1) Activaciones 38.2 (ciclos vivos que pasan de alerta a activado)
     act = mem.setdefault('activados', {})
     for c in mapa['ciclos']:
@@ -418,6 +405,7 @@ def detectar_eventos(sym, resultado, mem):
         if ev.get('estado') != 'VIVO':
             continue
         k = f"{c['direction']}|{c['ancla']:.2f}"
+        vivas['activados'].add(k)
         activado = bool(ev.get('activado'))
         previo = act.get(k)
         if not baseline and NOTIF_ACTIVACION and activado and previo is False:
@@ -444,6 +432,7 @@ def detectar_eventos(sym, resultado, mem):
             if (zmax - zmin) > precio * ZONA_MAX_OPERABLE_PCT:
                 continue  # zona macro: contexto, sin alertas de llegada
             k = _clave_zona(lado, z['name'], z['ancla'])
+            vivas['en_zona'].add(k)
             dentro = bool(zmin <= precio <= zmax)  # bool nativo: np.bool_ no es JSON
             if not baseline and NOTIF_ZONA and dentro and not en_zona.get(k):
                 accion = 'VENTAS' if lado == 'SELL' else 'COMPRAS'
@@ -476,6 +465,7 @@ def detectar_eventos(sym, resultado, mem):
         # zona oscile su borde vela a vela; solo re-avisa si el patrón murió (otro
         # estado de por medio) y volvió a armarse.
         k = _clave_zona(e['lado'], e['zona'], e['ancla'])
+        vivas['patron'].add(k)
         firma = estado
         if not baseline and interesa and firma != patron.get(k):
             if estado in ESTADOS_HITO:
@@ -492,6 +482,7 @@ def detectar_eventos(sym, resultado, mem):
     for g in resultado.get('duelos') or []:
         gana = g[0]
         k = f"{gana['lado']}|" + "|".join(sorted(f"{x['ancla']:.2f}" for x in g))
+        vivas['duelos'].add(k)
         d_g = gana['resultado'].get('detalles', {})
         firma_d = f"{gana['zona']}|{gana['resultado']['estado']}"
         if not baseline and firma_d != duelos_mem.get(k):
@@ -502,6 +493,20 @@ def detectar_eventos(sym, resultado, mem):
                            f"  llegada: {d_g.get('calidad_llegada', '?')}\n"
                            f"  pierde(n): {rivales}")
         duelos_mem[k] = firma_d
+
+    # Poda de firmas muertas (auditoría 12 jul): las claves de zonas/ciclos que
+    # ya no existen en el mapa se purgan tras PODA_ESCANEOS escaneos ausentes —
+    # sin esto estado_vivo.json crece para siempre.
+    n = mem['_n'] = mem.get('_n', 0) + 1
+    visto = mem.setdefault('visto', {})
+    for cat, dic in (('activados', act), ('en_zona', en_zona),
+                     ('patron', patron), ('duelos', duelos_mem)):
+        for k in vivas[cat]:
+            visto[f"{cat}:{k}"] = n
+        for k in list(dic):
+            if n - visto.get(f"{cat}:{k}", n) > PODA_ESCANEOS:
+                dic.pop(k)
+                visto.pop(f"{cat}:{k}", None)
 
     mem['baseline'] = True
     mem['fmt'] = FMT_ESTADO

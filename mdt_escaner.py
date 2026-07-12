@@ -11,6 +11,7 @@ disparar cualquier entrada (candado mapa->escáner).
 import pandas as pd
 from mdt_config import SYMBOL, TF_PATRON, TF_MINUTOS, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
+from mdt_gestion import entrada_de_resultado
 from mdt_macro_mapper import generar_mapa, reporte_tramos, _descargar, _ahora, ancla_viva
 
 VELAS_ESCANEO = 1500  # ventana máxima de velas de la TF del patrón
@@ -51,12 +52,19 @@ def _operacion(escaneo, prioritaria):
     res = escaneo['resultado']
     d = res.get('detalles', {})
     lado = escaneo['lado']
-    entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
-               or d.get('entrada_dt_618') or d.get('espera_calmada'))
-    if entrada is None and res['estado'].startswith('EE_'):
-        # Engaño Extremo: la agresiva entra al cruzar de vuelta el límite exterior
-        entrada = escaneo['rango'][0] if lado == "SELL" else escaneo['rango'][1]
-    sl = d.get('stop_loss', d.get('extremo_escape'))
+    hechos = entrada_de_resultado(res, lado, escaneo['rango'])
+    if hechos is not None:
+        # Gatillo EJECUTADO: extracción unificada (mdt_gestion, misma que
+        # usan el registro de operaciones reales y el backtest)
+        entrada, sl, _ = hechos
+    else:
+        # Patrón sin gatillo aún: VISTA PREVIA de la operación (entrada
+        # calmada esperada / cruce del límite en el EE armado)
+        entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
+                   or d.get('entrada_dt_618') or d.get('espera_calmada'))
+        if entrada is None and res['estado'].startswith('EE_'):
+            entrada = escaneo['rango'][0] if lado == "SELL" else escaneo['rango'][1]
+        sl = d.get('stop_loss', d.get('extremo_escape'))
     tp_zona = escaneo.get('tp_zona')
     if entrada is None or sl is None or tp_zona is None:
         return None
