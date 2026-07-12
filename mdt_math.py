@@ -71,7 +71,13 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
 
         if fin_v > origen_v:
             impulso = fin_v - origen_v
-            muerte = origen_v - impulso * 0.382
+            # MUERTE del fibo VIGENTE (Secc 4+6, auditoría 12 jul): el 138.2 que
+            # mata el ciclo es el mismo nivel del fibo de las cajas — la medida
+            # activada. La candidata (fin corrido sin nacer) NO aleja la muerte;
+            # re-mide todo solo cuando nace tocando su 38.2. Sin activar, el
+            # fibo corrido manda (aún no hay medida fijada).
+            imp_vigente = (fin_act - origen_v) if (activado and fin_act is not None) else impulso
+            muerte = origen_v - imp_vigente * 0.382
             act = fin_v - impulso * 0.382
 
             if lo <= muerte:
@@ -162,7 +168,9 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
         # Clasificación de la excursión por la posición ACTUAL del precio:
         # dentro del 19.1% = trabajando la zona del origen (operativa);
         # más allá (hasta el 38.2) = Zona de Indecisión (inoperable).
-        impulso = fin_v - origen_v
+        # Medida VIGENTE (Secc 4+6): la zona del origen y la muerte son del
+        # fibo de las cajas, no del candidato corrido.
+        impulso = fin_zonas - origen_v
         limite_zona = origen_v - impulso * 0.191
         close_v = m * float(df['close'].iloc[-1])
         res['zona_origen_en_trabajo'] = close_v >= limite_zona
