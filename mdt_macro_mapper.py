@@ -688,6 +688,18 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
             'alerts': alerts, 'precio': current_price, 'tramos': tramos}
 
 
+def zonas_finales_tramo(t, precio):
+    """Zonas finales de UN tramo tras la concurrencia INTERNA (Secc 19 solo
+    entre sus ciclos — regla usuario: cada tramo independiente). Copias: la
+    resolución muta las zonas y la vista del tramo no debe tocarse."""
+    out = []
+    for lado, key in (("SELL", 'sells'), ("BUY", 'buys')):
+        copias = [{**z} for z in t.get(key, [])]
+        for z in resolver_concurrencia(copias, lado, precio, verbose=False):
+            out.append((lado, z))
+    return out
+
+
 def reporte_tramos(mapa):
     """Vista de tramos INDEPENDIENTES (Secc 2 + reglas usuario 10 jul: "cada
     tramo sea mirado y operado por separado" / "me interesa saber si hay ciclos
@@ -718,11 +730,7 @@ def reporte_tramos(mapa):
             continue
 
         # Concurrencia de zonas del tramo (Secc 19, solo entre SUS ciclos)
-        zonas_t = []
-        for lado, key in (("SELL", 'sells'), ("BUY", 'buys')):
-            copias = [{**z} for z in t.get(key, [])]
-            for z in resolver_concurrencia(copias, lado, precio, verbose=False):
-                zonas_t.append((lado, z))
+        zonas_t = zonas_finales_tramo(t, precio)
         por_ancla = {}
         for lado, z in zonas_t:
             if z.get('ancla') is not None:

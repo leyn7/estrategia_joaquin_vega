@@ -77,7 +77,7 @@ def get_klines_vivo(symbol=SYMBOL, interval="1d", start_time=None):
 mdt_data.get_binance_klines = get_klines_vivo
 import mdt_macro_mapper  # noqa: E402
 mdt_macro_mapper.get_binance_klines = get_klines_vivo
-from mdt_escaner import escanear_mapa, ESTADOS_OPERABLES  # noqa: E402
+from mdt_escaner import escanear_mapa, escanear_tramos, ESTADOS_OPERABLES  # noqa: E402
 
 # Hitos no-operables que sí se notifican (elección del usuario: operables + hitos)
 ESTADOS_HITO = ("ANULADO_POR_CARENCIA", "ROTO_POR_DOBLE_TOQUE", "ROTO_POR_STOP_LOSS",
@@ -99,7 +99,24 @@ NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'profundo').lower()
 # MDT_NOTIF_LLEGADA=barrido -> solo notifica patrones nacidos de una llegada
 # BARRIDO (la mechita: toca y sale). Vacío = notifica todas (marcadas).
 NOTIF_LLEGADA = os.environ.get('MDT_NOTIF_LLEGADA', '').lower()
-FMT_ESTADO = 4  # versión del formato de firma; un cambio re-basa sin ráfaga
+FMT_ESTADO = 5  # versión del formato de firma; un cambio re-basa sin ráfaga
+
+
+def escanear_completo(sym, cutoff=None):
+    """Escaneo global + escaneo por tramos, fusionados para el detector de
+    eventos: las zonas que solo existen en la vista por tramos (las que la
+    concurrencia global absorbió — caso Alta del M5) entran etiquetadas con su
+    tramo; las compartidas no se duplican (manda la global). Los duelos entre
+    tramos (regla usuario 12 jul) viajan en resultado['duelos']."""
+    resultado = escanear_mapa(cutoff=cutoff, verbose=False, symbol=sym)
+    tr = escanear_tramos(cutoff=cutoff, mapa=resultado['mapa'], verbose=False, symbol=sym)
+    vistos = {(e['lado'], round(e['ancla'], 2), e['rango']) for e in resultado['escaneos']
+              if e.get('ancla') is not None}
+    extras = [e for e in tr['escaneos']
+              if (e['lado'], round(e['ancla'], 2), e['rango']) not in vistos]
+    resultado['escaneos'] = resultado['escaneos'] + extras
+    resultado['duelos'] = tr['duelos']
+    return resultado
 
 # Gatillos EJECUTADOS = entrada a mercado real. Se persisten como OPERACIONES
 # (hechos): la cadena de patrones es sin-estado y al re-parsear con velas
@@ -166,7 +183,8 @@ def _texto_escaneo(e):
     res = e['resultado']
     d = res.get('detalles', {})
     hora = _hora_cot(d.get('hora_gatillo') or d.get('hora_validacion'))
-    txt = (f"{res['estado']} en {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f}\n"
+    tramo_txt = f" [tramo {e['tramo']}]" if e.get('tramo') else ""
+    txt = (f"{res['estado']} en {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f}{tramo_txt}\n"
            f"  ciclo {e['tf_ciclo']} (ancla {e['ancla']:.2f}) -> patrón {e['tf_patron']}\n"
            f"  {res['mensaje']}")
     lleg = d.get('calidad_llegada')
@@ -468,12 +486,29 @@ def detectar_eventos(sym, resultado, mem):
                 eventos.append(f"🎯 {sym} | SEÑAL: {_texto_escaneo(e)}")
         patron[k] = firma
 
+    # 4) Duelos entre tramos (regla usuario 12 jul): patrones accionables de
+    # tramos DISTINTOS cuyas zonas concurren — gana la calidad del patrón.
+    duelos_mem = mem.setdefault('duelos', {})
+    for g in resultado.get('duelos') or []:
+        gana = g[0]
+        k = f"{gana['lado']}|" + "|".join(sorted(f"{x['ancla']:.2f}" for x in g))
+        d_g = gana['resultado'].get('detalles', {})
+        firma_d = f"{gana['zona']}|{gana['resultado']['estado']}"
+        if not baseline and firma_d != duelos_mem.get(k):
+            rivales = ", ".join(f"{x['zona']} [{x['tramo']}] ({x['resultado']['estado']})"
+                                for x in g[1:])
+            eventos.append(f"🥇 {sym} | DUELO DE PATRONES (zonas concurrentes entre tramos)\n"
+                           f"GANA por calidad: {_texto_escaneo(gana)}\n"
+                           f"  llegada: {d_g.get('calidad_llegada', '?')}\n"
+                           f"  pierde(n): {rivales}")
+        duelos_mem[k] = firma_d
+
     mem['baseline'] = True
     mem['fmt'] = FMT_ESTADO
     mem['ultimo_escaneo'] = str(ahora)
     mem['ultimo_precio'] = float(precio)
 
-    # 4) Operaciones reales: registro + gestión Secc 20 (sin filtro de notifs —
+    # 5) Operaciones reales: registro + gestión Secc 20 (sin filtro de notifs —
     # son los hechos del operador y sobreviven al re-parseo de la cadena)
     ev_ops = actualizar_operaciones(sym, resultado, mem)
 
@@ -560,7 +595,7 @@ def atender_comando(estado, texto):
             return f"{sym} no existe en futuros USDT-M de Binance."
         mdt_telegram.enviar(estado['chat_id'], f"Analizando {sym}... (1-3 min)")
         try:
-            resultado = escanear_mapa(verbose=False, symbol=sym)
+            resultado = escanear_completo(sym)
             return resumen_analisis(sym, resultado)
         except Exception as e:  # noqa: BLE001 — se reporta al operador
             log.exception("analiza %s", sym)
@@ -589,7 +624,7 @@ def procesar_comandos(estado, timeout=20):
 def una_pasada(estado):
     for sym in list(estado['watchlist']):
         mem = estado['simbolos'].setdefault(sym, {})
-        resultado = escanear_mapa(verbose=False, symbol=sym)
+        resultado = escanear_completo(sym)
         for ev in detectar_eventos(sym, resultado, mem):
             mdt_telegram.enviar(estado.get('chat_id'), ev)
     guardar_estado(estado)
@@ -616,7 +651,7 @@ def main():
         for sym in list(estado['watchlist']):
             mem = estado['simbolos'].setdefault(sym, {})
             try:
-                resultado = escanear_mapa(verbose=False, symbol=sym)
+                resultado = escanear_completo(sym)
                 for ev in detectar_eventos(sym, resultado, mem):
                     log.info("evento %s: %s", sym, ev.splitlines()[0])
                     mdt_telegram.enviar(estado['chat_id'], ev)

@@ -84,6 +84,37 @@ def _operacion(escaneo, prioritaria):
             "volumen": "Normal"}
 
 
+def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio):
+    """Escanea la cadena de patrones de UNA zona (episodio operativo recortado).
+
+    Secc 13 (checklist 1): el patrón solo vale dentro de una zona ACTIVA — la
+    ventana arranca en operativa_desde (activación del ciclo o apertura de la
+    excursión); la estructura anterior es historia de otro contexto.
+    """
+    from mdt_patrones import detect_patron_institucional
+    tf_patron = TF_PATRON.get(zona['tf'], zona['tf'])
+    if tf_patron not in cache_df:
+        desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * TF_MINUTOS[tf_patron])
+        df = _descargar(tf_patron, desde, cutoff, symbol)
+        df['open_time'] = to_cot(df['open_time'])
+        cache_df[tf_patron] = df
+    df = cache_df[tf_patron]
+    df_z = df
+    desde_op = zona.get('operativa_desde')
+    if desde_op is not None:
+        pos = int(df['open_time'].searchsorted(to_cot(pd.Timestamp(desde_op))))
+        df_z = df.iloc[max(0, pos - 2):].reset_index(drop=True)
+    zmax, zmin = max(zona['z']), min(zona['z'])
+    res = detect_patron_institucional(df_z, zmax, zmin, lado,
+                                      nivel_anulacion=zona.get('nivel_anulacion'))
+    # Zonas macro (más anchas que el % del precio) = CONTEXTO, no se operan
+    es_contexto = (zmax - zmin) > precio * ZONA_MAX_OPERABLE_PCT
+    return {'zona': zona['name'], 'rango': (zmax, zmin), 'lado': lado,
+            'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
+            'ancla': zona.get('ancla'), 'tp_zona': zona.get('tp_zona'),
+            'contexto': es_contexto, 'operativa_desde': desde_op, 'resultado': res}
+
+
 def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     """Genera (o recibe) el mapa y escanea patrones en cada zona operativa final.
 
@@ -91,8 +122,6 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     ancla, resultado}, ...]}. El escáner NO decide entradas: reporta el estado del
     patrón de cada zona; la gestión/el candado ancla_viva son de quien lo llama.
     """
-    from mdt_patrones import detect_patron_institucional
-
     if mapa is None:
         mapa = generar_mapa(cutoff, verbose=False, symbol=symbol)
 
@@ -103,34 +132,8 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
         for zona in zonas:
             if zona.get('z') is None or zona.get('tf') is None:
                 continue  # alertas o zonas sin ciclo rastreable
-            tf_patron = TF_PATRON.get(zona['tf'], zona['tf'])
-            if tf_patron not in cache_df:
-                desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * TF_MINUTOS[tf_patron])
-                df = _descargar(tf_patron, desde, cutoff, symbol)
-                df['open_time'] = to_cot(df['open_time'])
-                cache_df[tf_patron] = df
-            df = cache_df[tf_patron]
-            # Secc 13 (checklist 1): el patrón solo vale dentro de una zona ACTIVA.
-            # Se recorta la ventana al episodio operativo (desde la activación del
-            # ciclo o la apertura de la excursión) — la estructura anterior a que la
-            # zona existiera es historia de otro contexto, no Pautas de este trabajo.
-            df_z = df
-            desde_op = zona.get('operativa_desde')
-            if desde_op is not None:
-                pos = int(df['open_time'].searchsorted(to_cot(pd.Timestamp(desde_op))))
-                df_z = df.iloc[max(0, pos - 2):].reset_index(drop=True)
-            zmax, zmin = max(zona['z']), min(zona['z'])
-            res = detect_patron_institucional(df_z, zmax, zmin, lado,
-                                              nivel_anulacion=zona.get('nivel_anulacion'))
-            # Preferencia del usuario: las zonas macro (más anchas que el % del
-            # precio) son CONTEXTO — no se operan; sus oportunidades llegan por
-            # los sub-ciclos pequeños de adentro.
-            es_contexto = (zmax - zmin) > mapa['precio'] * ZONA_MAX_OPERABLE_PCT
-            escaneos.append({'zona': zona['name'], 'rango': (zmax, zmin), 'lado': lado,
-                             'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
-                             'ancla': zona.get('ancla'), 'tp_zona': zona.get('tp_zona'),
-                             'contexto': es_contexto,
-                             'operativa_desde': desde_op, 'resultado': res})
+            escaneos.append(_escanear_zona(zona, lado, limite, cutoff, symbol,
+                                           cache_df, mapa['precio']))
 
     # Las 4 Informaciones (Secc 7) para cada señal accionable (no-contexto)
     prioritaria, zona_que_manda = direccion_prioritaria(mapa)
@@ -186,6 +189,108 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
             'prioritaria': prioritaria, 'zona_que_manda': zona_que_manda}
 
 
+def _puntaje_patron(e):
+    """Calidad del patrón para el DUELO entre tramos (regla usuario 12 jul:
+    "cuando tengamos patrones que concurran en zona con otras [de otro tramo],
+    miraremos en cuál patrón operaremos dependiendo de la calidad del patrón").
+    Orden: llegada BARRIDO > NORMAL > LENTA; gatillo vivo > en espera;
+    proporcional; sin carencia implícita en estado; ratio como desempate."""
+    res = e['resultado']
+    d = res.get('detalles', {})
+    lleg = {'BARRIDO': 2, 'NORMAL': 1, 'LENTA': 0}.get(d.get('calidad_llegada'), 1)
+    gatillo = 1 if 'GATILLO' in res['estado'] else 0
+    prop = 1 if d.get('proporcional') else 0
+    op = e.get('operacion') or {}
+    return (lleg, gatillo, prop, op.get('ratio', 0.0))
+
+
+def _rangos_solapan(a, b):
+    return min(a[0], b[0]) >= max(a[1], b[1])  # rangos son (max, min)
+
+
+def duelos_entre_tramos(escaneos):
+    """Duelos de patrones: señales accionables del MISMO lado cuyas zonas
+    concurren (se solapan) pero pertenecen a TRAMOS DISTINTOS — dentro del
+    tramo manda la concurrencia de zonas (Secc 19); entre tramos decide la
+    CALIDAD del patrón. Devuelve grupos ordenados: el primero es el ganador."""
+    acc = [e for e in escaneos
+           if e['resultado']['estado'] in ESTADOS_OPERABLES and not e['contexto']
+           and e.get('tramo') is not None]
+    grupos = []
+    for e in acc:
+        for g in grupos:
+            if (g[0]['lado'] == e['lado']
+                    and any(_rangos_solapan(x['rango'], e['rango']) for x in g)):
+                g.append(e)
+                break
+        else:
+            grupos.append([e])
+    duelos = []
+    for g in grupos:
+        if len({x['tramo'] for x in g}) >= 2:
+            g.sort(key=_puntaje_patron, reverse=True)
+            duelos.append(g)
+    return duelos
+
+
+def escanear_tramos(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
+    """Escáner de patrones POR TRAMO (regla usuario 12 jul): cada tramo
+    independiente escanea SUS zonas finales (concurrencia interna Secc 19) y
+    las señales salen etiquetadas con su tramo. Caso que lo motivó: el
+    EE_GATILLO de la Alta del M5 (venta 582.05/SL 583.42, el techo del rally
+    del 11 jul) solo era visible en la vista por tramos — en el mapa global
+    esa Alta queda absorbida (Caso 1) por la Media del Bajista N4.
+
+    Devuelve {'mapa', 'escaneos' (con e['tramo']), 'duelos'}: los duelos son
+    grupos de patrones accionables de TRAMOS DISTINTOS cuyas zonas concurren,
+    ordenados por calidad (el primero gana)."""
+    from mdt_macro_mapper import zonas_finales_tramo
+    if mapa is None:
+        mapa = generar_mapa(cutoff, verbose=False, symbol=symbol)
+    limite = cutoff if cutoff is not None else _ahora()
+    cache_df = {}
+    escaneos = []
+    for t in mapa.get('tramos', []):
+        for lado, zona in zonas_finales_tramo(t, mapa['precio']):
+            if zona.get('z') is None or zona.get('tf') is None or zona.get('ancla') is None:
+                continue
+            e = _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, mapa['precio'])
+            e['tramo'] = t['nombre']
+            if e['resultado']['estado'] in ESTADOS_OPERABLES and not e['contexto']:
+                # La señal hereda la prioridad de SU zona (regla 10 jul)
+                e['operacion'] = _operacion(e, None)
+            escaneos.append(e)
+    duelos = duelos_entre_tramos(escaneos)
+
+    if verbose:
+        print("\n--- ESCÁNER DE PATRONES POR TRAMO (zonas independientes por muñeca) ---")
+        for e in escaneos:
+            res = e['resultado']
+            if res['estado'] == 'NO_INICIADO':
+                continue
+            marca = " <<<" if res['estado'] in ESTADOS_OPERABLES and not e['contexto'] else ""
+            ctx = " [contexto]" if e['contexto'] else ""
+            d = res.get('detalles', {})
+            lleg = d.get('calidad_llegada')
+            lleg_txt = f" [LLEGADA: {lleg}]" if lleg and lleg != 'NORMAL' else ""
+            print(f"[{e['tramo']}] [{e['lado']}] {e['zona']} "
+                  f"{e['rango'][0]:.2f}-{e['rango'][1]:.2f}{ctx}")
+            print(f"      {res['estado']}: {res['mensaje'][:110]}{lleg_txt}{marca}")
+            op = e.get('operacion')
+            if op:
+                print(f"      OPERACIÓN: entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
+                      f"| TP {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f} | R:B 1:{op['ratio']:.1f}")
+        for g in duelos:
+            gana = g[0]
+            print(f"\n🥇 DUELO ({'VENTAS' if gana['lado'] == 'SELL' else 'COMPRAS'} concurrentes "
+                  f"entre tramos): GANA {gana['zona']} [{gana['tramo']}] "
+                  f"(llegada {gana['resultado'].get('detalles', {}).get('calidad_llegada', '?')}, "
+                  f"{gana['resultado']['estado']})")
+            for x in g[1:]:
+                print(f"      pierde: {x['zona']} [{x['tramo']}] ({x['resultado']['estado']})")
+    return {'mapa': mapa, 'escaneos': escaneos, 'duelos': duelos}
+
+
 def revalidar_setup(escaneo, cutoff=None, symbol=SYMBOL):
     """Candado mapa->escáner (Regla 3): ¿el ancla del setup sigue viva en un mapa
     fresco? Si el ancla fue enterrada (desgrane) o murió (138.2/evolución), el
@@ -212,6 +317,7 @@ if __name__ == "__main__":
     if args.tramos:
         _mapa = generar_mapa(_cutoff, verbose=False, symbol=args.symbol.upper())
         print(reporte_tramos(_mapa))
+        escanear_tramos(_cutoff, mapa=_mapa, verbose=True, symbol=args.symbol.upper())
     else:
         _mapa = generar_mapa(_cutoff, verbose=True, symbol=args.symbol.upper())
         escanear_mapa(_cutoff, mapa=_mapa, verbose=True, symbol=args.symbol.upper())
