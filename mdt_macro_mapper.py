@@ -690,6 +690,133 @@ def generar_mapa(cutoff=None, verbose=True, symbol=SYMBOL):
             'alerts': alerts, 'precio': current_price, 'tramos': tramos}
 
 
+def localizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None,
+                    tf="30m", dias=240):
+    """Ubica en el gráfico el ancla que el operador señaló y decide su sentido.
+
+    Un ancla alcista es un MÍNIMO (origen de un impulso al alza); una bajista es
+    un MÁXIMO. Se busca la vela cuyo low (o high) más se acerque al precio dado;
+    si no se especifica sentido, gana la coincidencia más exacta.
+    Devuelve (hora_ancla, direction, precio_real) o None.
+    """
+    limite = pd.Timestamp(cutoff) if cutoff is not None else _ahora()
+    df = _descargar(tf, limite - pd.Timedelta(days=dias), cutoff, symbol)
+    if not len(df):
+        return None
+    i_lo = int((df['low'] - precio_ancla).abs().idxmin())
+    i_hi = int((df['high'] - precio_ancla).abs().idxmin())
+    err_lo = abs(float(df.loc[i_lo, 'low']) - precio_ancla)
+    err_hi = abs(float(df.loc[i_hi, 'high']) - precio_ancla)
+    if direction is None:
+        direction = "BULLISH" if err_lo <= err_hi else "BEARISH"
+    if direction == "BULLISH":
+        return df.loc[i_lo, 'open_time'], direction, float(df.loc[i_lo, 'low'])
+    return df.loc[i_hi, 'open_time'], direction, float(df.loc[i_hi, 'high'])
+
+
+def zonas_de_tramo(res, direction, precio, peso_base=100):
+    """Zonas operativas de UN tramo con su concurrencia INTERNA (Secc 19 solo
+    entre sus ciclos). Devuelve (zonas [(lado, zona)], alertas)."""
+    buys, sells, alerts = [], [], []
+    for j, c in enumerate(res['ciclos']):
+        c['peso'] = peso_base - j
+        c['direction'] = direction
+        _registrar_ciclo(c, direction, buys, sells, alerts, verbose=False)
+    zonas = []
+    for lado, lista in (("SELL", sells), ("BUY", buys)):
+        for z in resolver_concurrencia([{**x} for x in lista], lado, precio, verbose=False):
+            zonas.append((lado, z))
+    return zonas, alerts
+
+
+def analizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None):
+    """Mapa de UN tramo que arranca en el ancla que marcó el operador y corre
+    hasta el extremo vigente (regla usuario 13 jul: "si le envío un ancla es
+    desde ahí hasta el precio máximo o mínimo").
+
+    Devuelve {'ancla','direction','origen','extremo','ciclos','zonas','alerts',
+    'precio','reset_618'} — los ciclos ya traen su estado y las zonas la
+    concurrencia interna del tramo aplicada.
+    """
+    loc = localizar_ancla(precio_ancla, symbol, cutoff, direction)
+    if loc is None:
+        return None
+    t_ancla, direction, precio_real = loc
+    res = analizar_tramo(f"Ancla {precio_real:.2f}", t_ancla, None, direction,
+                         cutoff, verbose=False, symbol=symbol)
+    if res is None or res.get('extremo') is None:
+        return None
+    precio = res.get('precio_ref')
+    if precio is None:
+        df = _descargar("1m", None, cutoff, symbol)
+        precio = float(df['close'].iloc[-1]) if len(df) else precio_real
+    zonas, alerts = zonas_de_tramo(res, direction, precio)
+    return {'ancla': precio_real, 'ancla_time': t_ancla, 'direction': direction,
+            'origen': res['origen'], 'extremo': res['extremo'],
+            'ciclos': res['ciclos'], 'zonas': zonas, 'alerts': alerts,
+            'reset_618': res.get('reset_618'), 'precio': precio}
+
+
+def reporte_ancla(a):
+    """Texto del mapa de un ancla: ciclos CON zonas operables (los que no tienen
+    se omiten) y dónde está el precio respecto a ellas."""
+    precio = a['precio']
+    sentido = "alcista" if a['direction'] == 'BULLISH' else "bajista"
+    L = [f"⚓ ANCLA {a['ancla']:.2f} ({sentido}) → extremo {a['extremo']:.2f}",
+         f"   precio {precio:.2f} | {str(a['ancla_time'])[:16]}"]
+    if a.get('reset_618'):
+        L.append(f"   ⚡ RESET 61.8 del tramo ({a['reset_618']['nivel']:.2f}): "
+                 "los puntos de control internos ya no son válidos.")
+
+    por_ancla = {}
+    for lado, z in a['zonas']:
+        if z.get('ancla') is not None:
+            por_ancla.setdefault(round(z['ancla'], 2), []).append((lado, z))
+
+    dentro, fuera, omitidos = [], [], []
+    L.append("")
+    L.append("CICLOS OPERABLES (concurrencia aplicada):")
+    hay = False
+    for c in a['ciclos']:
+        ev = c.get('eval') or {}
+        if ev.get('estado') != 'VIVO':
+            continue
+        zs = por_ancla.get(round(c['ancla'], 2), [])
+        if not zs:
+            omitidos.append(f"{c['ancla']:.2f}")
+            continue
+        hay = True
+        grado = f"grado {c['grado']:.2f}" if c['grado'] is not None else "macro del tramo"
+        estado = ("ACTIVADO" if ev.get('activado') else
+                  f"en alerta (38.2 en {ev['nivel_activacion']:.2f})")
+        L.append(f"  • Ciclo {c['ancla']:.2f} ({c['tf']}, {grado}) {estado}")
+        for lado, z in sorted(zs, key=lambda x: -max(x[1]['z'])):
+            zmax, zmin = max(z['z']), min(z['z'])
+            accion = "VENTAS" if lado == "SELL" else "COMPRAS"
+            banda = z['name'].rsplit('(', 1)[-1].rstrip(')') if '(' in z['name'] else '?'
+            if zmin <= precio <= zmax:
+                dentro.append((accion, z))
+                marca = "  ← PRECIO DENTRO 🎯"
+            else:
+                d = (zmin - precio) if precio < zmin else (precio - zmax)
+                fuera.append((d, accion, z))
+                marca = f"  (a {d:.2f} | {d / precio:.1%})"
+            L.append(f"      [{accion}] {banda}: {zmax:.2f}-{zmin:.2f}{marca}")
+    if not hay:
+        L.append("  (ningún ciclo conserva zonas operables)")
+    if omitidos:
+        L.append(f"  Omitidos sin zona útil: {', '.join(omitidos)}")
+    if dentro:
+        L.append("")
+        L.append(f"🎯 EL PRECIO ESTÁ EN ZONA de {'/'.join(sorted({a for a, _ in dentro}))} "
+                 "— buscar patrón (3 Pautas).")
+    elif fuera:
+        d, accion, z = min(fuera, key=lambda x: x[0])
+        L.append("")
+        L.append(f"➡️ Próxima zona: {z['name']} ({accion}) a {d:.2f} ({d / precio:.1%})")
+    return "\n".join(L)
+
+
 def zonas_finales_tramo(t, precio):
     """Zonas finales de UN tramo tras la concurrencia INTERNA (Secc 19 solo
     entre sus ciclos — regla usuario: cada tramo independiente). Copias: la

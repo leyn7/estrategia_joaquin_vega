@@ -548,8 +548,15 @@ AYUDA = ("Comandos:\n"
          "  agrega SYM — añade a la vigilancia (ej. agrega ETHUSDT)\n"
          "  quita SYM — deja de vigilar\n"
          "  analiza SYM — análisis completo puntual (1-3 min)\n"
-         "  tramos SYM — mapa por tramos independientes (cada muñeca aparte, 1-3 min)\n"
+         "  tramos SYM — mapa por tramos independientes (cada muñeca aparte)\n"
          "  operaciones — operaciones reales registradas (SL/parcial/estado)\n"
+         "\n⚓ ANCLAS PROPIAS (tú marcas el origen del tramo):\n"
+         "  ancla PRECIO [SYM] — mapea ese tramo (ciclos + zonas) y lo VIGILA;\n"
+         "     avisa cuando el precio entre en una zona operativa suya.\n"
+         "     Sentido automático (mínimo=alcista / máximo=bajista).\n"
+         "     Forzarlo: ancla 560.58 alcista\n"
+         "  anclas — las anclas que estoy vigilando\n"
+         "  borra ancla PRECIO — dejar de vigilarla\n"
          "  ayuda — esto")
 
 
@@ -595,6 +602,55 @@ def atender_comando(estado, texto):
         estado['watchlist'].remove(arg)
         estado['simbolos'].pop(arg, None)
         return f"{arg} eliminado de la vigilancia."
+    if cmd == 'ancla' and len(partes) > 1:
+        try:
+            precio_a = float(partes[1].replace(',', '.'))
+        except ValueError:
+            return "Uso: ancla 560.58 [SYM] [alcista|bajista]"
+        resto = [p.lower() for p in partes[2:]]
+        sym = next((p.upper() for p in partes[2:] if p.upper().endswith('USDT')), SYMBOL)
+        direccion = ("BULLISH" if 'alcista' in resto else
+                     "BEARISH" if 'bajista' in resto else None)
+        mdt_telegram.enviar(estado['chat_id'], f"⚓ Mapeando el tramo desde {precio_a:.2f}... (1-3 min)")
+        try:
+            from mdt_macro_mapper import analizar_ancla, reporte_ancla
+            a = analizar_ancla(precio_a, symbol=sym, direction=direccion)
+            if a is None:
+                return f"No pude ubicar el ancla {precio_a:.2f} en el gráfico de {sym}."
+            anclas = estado.setdefault('anclas', {})
+            anclas[f"{sym}|{a['ancla']:.2f}"] = {
+                'symbol': sym, 'ancla': a['ancla'], 'direction': a['direction'],
+                'zonas_vistas': {},
+            }
+            guardar(estado)
+            return (reporte_ancla(a) + "\n\n👁 VIGILANDO este tramo: te aviso cuando el "
+                    "precio entre en una de sus zonas operativas.")
+        except Exception as e:  # noqa: BLE001
+            log.exception("ancla %s", precio_a)
+            return f"Error mapeando el ancla: {e}"
+
+    if cmd == 'anclas':
+        anclas = estado.get('anclas') or {}
+        if not anclas:
+            return "Sin anclas vigiladas. Envía: ancla 560.58"
+        lineas = ["⚓ Anclas vigiladas:"]
+        for k, v in anclas.items():
+            sentido = 'alcista' if v['direction'] == 'BULLISH' else 'bajista'
+            lineas.append(f"  {v['symbol']} {v['ancla']:.2f} ({sentido})")
+        return '\n'.join(lineas)
+
+    if cmd == 'borra' and len(partes) > 2 and partes[1].lower() == 'ancla':
+        try:
+            p = float(partes[2].replace(',', '.'))
+        except ValueError:
+            return "Uso: borra ancla 560.58"
+        anclas = estado.setdefault('anclas', {})
+        fuera = [k for k in anclas if abs(anclas[k]['ancla'] - p) < 0.01]
+        for k in fuera:
+            anclas.pop(k)
+        guardar(estado)
+        return (f"🗑 Ancla {p:.2f} eliminada." if fuera else f"No vigilaba el ancla {p:.2f}.")
+
     if cmd in ('tramos', 'tramo'):
         sym = arg or SYMBOL
         if not _simbolo_valido(sym):
@@ -639,6 +695,46 @@ def procesar_comandos(estado, timeout=20):
 # ---------------------------------------------------------------------------
 # Bucle principal
 # ---------------------------------------------------------------------------
+def vigilar_anclas(estado):
+    """Anclas marcadas por el operador (regla usuario 13 jul): re-mapea cada
+    tramo (el extremo se mueve con el precio) y avisa cuando el precio ENTRA en
+    una de sus zonas operativas. Dedup por zona: se avisa una vez por entrada."""
+    from mdt_macro_mapper import analizar_ancla, reporte_ancla
+    eventos = []
+    for clave, v in list((estado.get('anclas') or {}).items()):
+        try:
+            a = analizar_ancla(v['ancla'], symbol=v['symbol'], direction=v['direction'])
+        except Exception:
+            log.exception("vigilancia del ancla %s", clave)
+            continue
+        if a is None:
+            continue
+        precio = a['precio']
+        vistas = v.setdefault('zonas_vistas', {})
+        activas = set()
+        for lado, z in a['zonas']:
+            if not z.get('z') or z.get('ancla') is None:
+                continue
+            zmax, zmin = max(z['z']), min(z['z'])
+            k = f"{lado}|{z['name']}|{z['ancla']:.2f}"
+            activas.add(k)
+            dentro = bool(zmin <= precio <= zmax)
+            if dentro and not vistas.get(k):
+                accion = 'VENTAS' if lado == 'SELL' else 'COMPRAS'
+                eventos.append(
+                    f"⚓🎯 {v['symbol']} | PRECIO EN ZONA DEL ANCLA {a['ancla']:.2f}\n"
+                    f"{z['name']}: {zmax:.2f}-{zmin:.2f} ({accion})\n"
+                    f"  precio {precio:.2f} | ciclo {z.get('tf', '?')} "
+                    f"(ancla {z['ancla']:.2f})\n"
+                    f"  tramo: {a['ancla']:.2f} → {a['extremo']:.2f}\n"
+                    "  A vigilar formación de patrón (3 Pautas).")
+            vistas[k] = dentro
+        for k in list(vistas):          # zonas que ya no existen
+            if k not in activas:
+                vistas.pop(k)
+    return eventos
+
+
 def una_pasada(estado):
     for sym in list(estado['watchlist']):
         mem = estado['simbolos'].setdefault(sym, {})
@@ -676,6 +772,14 @@ def main():
             except Exception:  # noqa: BLE001 — el bucle jamás muere por un símbolo
                 log.exception("escaneo %s falló; se reintenta en el próximo ciclo", sym)
             guardar_estado(estado)
+        # Anclas marcadas por el operador (independientes de la watchlist)
+        try:
+            for ev in vigilar_anclas(estado):
+                log.info("evento ancla: %s", ev.splitlines()[0])
+                mdt_telegram.enviar(estado['chat_id'], ev)
+        except Exception:  # noqa: BLE001
+            log.exception("vigilancia de anclas falló")
+        guardar_estado(estado)
         # ventana de comandos hasta el próximo escaneo (long-poll de Telegram)
         while time.time() - inicio < INTERVALO:
             if mdt_telegram.TOKEN:
