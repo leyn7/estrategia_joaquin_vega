@@ -200,8 +200,11 @@ def analizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None,
         return None
     t_ancla, direction, precio_real, alternativas = loc
 
+    # El ancla del operador ES el origen del tramo: sin esto se re-deducía del
+    # mínimo de la TF gruesa y se corría sola (560.58 -> 560.85, fibos movidos).
     res = analizar_tramo(f"Ancla {precio_real:.2f}", t_ancla, None, direction,
-                         cutoff, verbose=False, symbol=symbol)
+                         cutoff, verbose=False, symbol=symbol,
+                         origen_fijo=(precio_real, t_ancla))
     if res is None or res.get('extremo') is None:
         return None
 

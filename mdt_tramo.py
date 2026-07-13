@@ -22,7 +22,7 @@ from mdt_math import evaluar_ciclo
 
 
 def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True,
-                       symbol=SYMBOL):
+                       symbol=SYMBOL, origen_fijo=None):
     """Cascada de extracción cronológica sobre un tramo (Regla 1).
 
     Cada TF más fina re-escanea TODO el tramo (hasta donde alcance su presupuesto
@@ -33,6 +33,12 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True,
 
     fin_limite es cota EXCLUSIVA (None = hasta el cutoff/presente: el extremo es
     el extremo corrido, se mueve con el precio).
+
+    origen_fijo=(precio, hora): el ANCLA QUE MARCÓ EL OPERADOR manda como origen
+    (regla usuario 13 jul). Sin esto el origen se re-deducía del mínimo de la TF
+    gruesa, y la vela gruesa que contiene el ancla empieza ANTES de la marca: se
+    quedaba fuera y el origen se corría solo (ancla 560.58 -> ciclo 560.85, con
+    todos los fibos desplazados casi 0.2).
     """
     bull = direction == "BULLISH"
     mapa, cronologia = [], []
@@ -57,18 +63,25 @@ def extraer_mapa_tramo(inicio, fin_limite, direction, cutoff=None, verbose=True,
         if len(df_tf) < 6:
             continue
 
-        if bull:
+        if origen_fijo is not None:
+            # El ancla del operador es el origen: la extracción arranca en su vela
+            o_idx = int(df_tf['open_time'].searchsorted(pd.Timestamp(origen_fijo[1])))
+            o_idx = min(max(o_idx, 0), len(df_tf) - 2)
+        elif bull:
             o_idx = int(df_tf['low'].idxmin())
-            e_idx = int(df_tf.loc[o_idx:, 'high'].idxmax())
         else:
             o_idx = int(df_tf['high'].idxmax())
-            e_idx = int(df_tf.loc[o_idx:, 'low'].idxmin())
+        e_idx = (int(df_tf.loc[o_idx:, 'high'].idxmax()) if bull
+                 else int(df_tf.loc[o_idx:, 'low'].idxmin()))
         if e_idx <= o_idx:
             continue
         if tf_macro is None:
             tf_macro = tf
-            origen_val = float(df_tf.loc[o_idx, 'low' if bull else 'high'])
-            origen_time = df_tf.loc[o_idx, 'open_time']
+            if origen_fijo is not None:
+                origen_val, origen_time = float(origen_fijo[0]), pd.Timestamp(origen_fijo[1])
+            else:
+                origen_val = float(df_tf.loc[o_idx, 'low' if bull else 'high'])
+                origen_time = df_tf.loc[o_idx, 'open_time']
         extremo_val = float(df_tf.loc[e_idx, 'high' if bull else 'low'])
         extremo_time = df_tf.loc[e_idx, 'open_time']
 
@@ -197,11 +210,15 @@ def _reset_618_del_tramo(ext, ciclos, direction, cutoff, symbol):
 
 
 def analizar_tramo(nombre, inicio, fin_limite, direction, cutoff=None, verbose=True,
-                   symbol=SYMBOL):
+                   symbol=SYMBOL, origen_fijo=None):
     """Extrae los puntos de control del tramo (Regla 1) y sigue cada ciclo vela a
     vela hasta el cutoff/presente (Regla 2). Los ciclos que devuelve, con su
-    estado, son la fuente ÚNICA de anclas para el escáner (Regla 3)."""
-    ext = extraer_mapa_tramo(inicio, fin_limite, direction, cutoff, verbose, symbol)
+    estado, son la fuente ÚNICA de anclas para el escáner (Regla 3).
+
+    origen_fijo=(precio, hora): el ancla que marcó el operador manda como origen
+    del tramo (no se re-deduce del mínimo/máximo de la TF gruesa)."""
+    ext = extraer_mapa_tramo(inicio, fin_limite, direction, cutoff, verbose, symbol,
+                             origen_fijo)
     if ext['origen'] is None:
         return None
 
