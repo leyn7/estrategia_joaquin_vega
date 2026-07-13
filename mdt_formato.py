@@ -60,6 +60,102 @@ def texto_escaneo(e):
     return txt + texto_operacion(e.get('operacion'))
 
 
+# Qué significa cada estado del patrón, en el idioma del operador (los estados
+# son del motor; esto es lo que él quiere leer: "hizo un engaño profundo").
+FRASES = {
+    'P3_CORTA_GATILLO': '🔴 ENGAÑO PROFUNDO DISPARADO (entrada profunda, Pauta 3 corta)',
+    'ENTRADA_PROFUNDA_ESPERANDO': '🟡 Entrada Profunda ARMADA: espera el retroceso al 61.8',
+    'P3_CORTA_ROTA': '❌ Entrada Profunda que saltó el stop',
+    'GATILLO_ACTIVADO': '🔴 ENGAÑO COMPLETO DISPARADO (3 Pautas)',
+    'ENGAÑO_EN_CURSO': '🟡 engaño en curso: consumió el 161.8, espera el gatillo',
+    'ESPERANDO_1618': '🟡 engaño formándose: aún no consume el 161.8',
+    'EN_FORMACION_PAUTA_2': '⏳ formando la Pauta 2 (el rechazo aún corre)',
+    'ROTO_POR_STOP_LOSS': '❌ engaño que saltó el stop',
+    'ROTO_POR_DOBLE_TOQUE': '❌ engaño roto: retesteó el extremo del 161.8',
+    'ANULADO_POR_CARENCIA': '⚠ gatillo con CARENCIA (no operable): espera el 161.8 o validación',
+    'VALIDADO_POSTERIOR': '🟡 carencia VALIDADA después: solo entrada calmada',
+    'DT_IMPULSO_GATILLO': '🔴 DOBLE TECHO/SUELO CON IMPULSO DISPARADO',
+    'DT_IMPULSO_ESPERANDO': '🟡 Doble Techo/Suelo con Impulso: espera el 61.8',
+    'ROTO_POR_RETESTEO_DILATACION': '❌ Doble Techo/Suelo roto (retesteó la dilatación)',
+    'EE_GATILLO': '🔴 ENGAÑO EXTREMO DISPARADO (volvió a entrar a la zona)',
+    'EE_ARMADO': '🟡 Engaño Extremo ARMADO: entra si el precio cruza de vuelta',
+    'EE_EN_INDECISION': '⚪ precio fuera de la zona, en indecisión: INOPERABLE',
+    'EE_DESCARTADO_25': '⚪ escape tímido (<25%): descartado, viene sacudida más potente',
+    'ANULADO_POR_ESCAPE': '❌ anulado: el precio escapó de la zona',
+    'ANULADO_VUELTA_EN_V': '⚪ vuelta en V (solo 2 pautas): sin información, descartado',
+    'ANULADO_SIN_SALIDA_DE_ZONA': '⚪ trabajo interno (la P2 no salió de la zona): no es patrón',
+    'ANULADO_POR_PROPORCIONALIDAD': '⚪ patrón no proporcional roto: evoluciona al siguiente engaño',
+    'NO_PROPORCIONAL_EN_CURSO': '⚪ patrón NO proporcional (jamás operable): espera evolución',
+    'ESTRUCTURA_DESCARTADA': '⚪ llegada tímida: sin patrón, esperar nueva Pauta 1',
+    'ZONA_AGOTADA': '⚫ ZONA AGOTADA: se rompieron 3 engaños',
+    'NO_INICIADO': '⚪ sin actividad: el precio no ha dejado picos dentro',
+}
+
+
+def _frase(estado):
+    return FRASES.get(estado, estado)
+
+
+def _linea_trabajo(h):
+    """Un trabajo pasado de la zona: qué fue, cuándo y con qué entrada/SL."""
+    d = h.get('detalles', {})
+    hora = hora_cot(d.get('hora_gatillo') or d.get('hora_validacion') or d.get('pauta1_time'))
+    txt = f"   • {_frase(h['estado'])}"
+    if hora:
+        txt += f" ({hora})"
+    entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
+               or d.get('entrada_dt_618') or d.get('espera_calmada'))
+    if entrada is not None and d.get('stop_loss') is not None:
+        txt += f"\n     entrada {entrada:.2f} | SL {d['stop_loss']:.2f}"
+    return txt
+
+
+def texto_zonas_ancla(escaneos, precio):
+    """QUÉ HA PASADO en cada zona del tramo del ancla (regla usuario 13 jul: "el
+    precio hizo un engaño profundo desde esa ancla y el bot no me lo dijo").
+
+    De cada zona sale su HISTORIA completa (la cadena de engaños del episodio) y
+    lo que ocurre AHORA; si hay algo operable, con la operación entera."""
+    if not escaneos:
+        return "\n\nSin zonas escaneables en este tramo."
+    L = ["", "📖 QUÉ HA PASADO EN SUS ZONAS:"]
+    for e in sorted(escaneos, key=lambda e: -max(e['rango'])):
+        res = e['resultado']
+        accion = "VENTAS" if e['lado'] == "SELL" else "COMPRAS"
+        zmax, zmin = e['rango']
+        if zmin <= precio <= zmax:
+            donde = "← PRECIO DENTRO 🎯"
+        else:
+            d = (zmin - precio) if precio < zmin else (precio - zmax)
+            donde = f"(a {d:.2f} | {d / precio:.1%})"
+        ctx = " [zona macro: contexto]" if e['contexto'] else ""
+        L.append(f"\n[{accion}] {e['zona']} {zmax:.2f}-{zmin:.2f} {donde}{ctx}")
+
+        previos = [h for h in (res.get('historial') or []) if h is not res]
+        if previos:
+            L.append(f"   ── ya trabajada {len(previos)} vez(ces):")
+            L += [_linea_trabajo(h) for h in previos]
+        if res['estado'] == 'NO_INICIADO' and not previos:
+            L.append(f"   {_frase(res['estado'])}")
+            continue
+        L.append(f"   ➡ AHORA: {_frase(res['estado'])}")
+        d = res.get('detalles', {})
+        hora = hora_cot(d.get('hora_gatillo') or d.get('hora_validacion'))
+        if hora:
+            L.append(f"      {hora}")
+        lleg = d.get('calidad_llegada')
+        if lleg == "BARRIDO":
+            L.append(f"      ⚡ llegada BARRIDO: tocó y salió (mecha {d.get('mecha_vs_cuerpo')}x)")
+        elif lleg == "LENTA":
+            L.append(f"      🐌 llegada lenta: {d.get('cierres_dentro')} cierres dentro")
+        op = e.get('operacion')
+        if op:
+            L.append(texto_operacion(op).lstrip('\n'))
+        elif e['contexto'] and res['estado'] in ESTADOS_OPERABLES:
+            L.append("      (zona macro: no se opera; sus oportunidades llegan por los sub-ciclos)")
+    return '\n'.join(L)
+
+
 def resumen_analisis(sym, resultado):
     """Resumen compacto de un escaneo completo (arranque y comando 'analiza')."""
     mapa = resultado['mapa']

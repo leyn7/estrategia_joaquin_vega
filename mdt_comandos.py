@@ -12,10 +12,10 @@ import requests
 
 import mdt_telegram
 from mdt_config import SYMBOL, TZ_LOCAL
-from mdt_escaner import escanear_completo
+from mdt_escaner import escanear_ancla, escanear_completo
 from mdt_estructura import TF_BUSQUEDA
 from mdt_estado import guardar_estado
-from mdt_formato import resumen_analisis
+from mdt_formato import resumen_analisis, texto_zonas_ancla
 from mdt_ops import texto_operaciones
 
 log = logging.getLogger('mdt.comandos')
@@ -116,8 +116,12 @@ def _cmd_ancla(estado, partes):
             'zonas_vistas': {},
         }
         guardar_estado(estado)
-        return (reporte_ancla(a) + "\n\n👁 VIGILANDO este tramo: te aviso cuando el "
-                "precio entre en una de sus zonas operativas.")
+        # El mapa dice DÓNDE están las zonas; el escáner, QUÉ pasó dentro de ellas
+        # (regla usuario 13 jul: "el precio hizo un engaño profundo y no me lo dijo")
+        escaneos = escanear_ancla(a, symbol=sym)
+        return (reporte_ancla(a) + texto_zonas_ancla(escaneos, a['precio'])
+                + "\n\n👁 VIGILANDO este tramo: te aviso cuando el precio entre en "
+                  "una de sus zonas operativas.")
     except Exception as e:  # noqa: BLE001 — se le reporta al operador
         log.exception("ancla %s", precio_a)
         return f"Error mapeando el ancla: {e}"

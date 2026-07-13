@@ -123,6 +123,28 @@ def escanear_tramos(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     return {'mapa': mapa, 'escaneos': escaneos, 'duelos': duelos}
 
 
+def escanear_ancla(a, cutoff=None, symbol=SYMBOL):
+    """Patrones de las zonas del tramo que marcó el operador (regla usuario 13
+    jul: "necesito que me termine el análisis — qué está ocurriendo o qué ocurrió
+    en alguna de sus zonas"). El mapa del ancla dice DÓNDE están las zonas; esto
+    dice QUÉ ha pasado dentro de ellas: toda la cadena de engaños del episodio
+    (res['historial']), no solo el estado vigente.
+
+    Devuelve la lista de escaneos, con su operación si el patrón es accionable."""
+    limite = cutoff if cutoff is not None else _ahora()
+    cache_df = {}
+    escaneos = []
+    for lado, zona in a['zonas']:
+        if zona.get('z') is None or zona.get('tf') is None:
+            continue
+        e = _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, a['precio'])
+        e['tramo'] = f"Ancla {a['ancla']:.2f}"
+        if es_accionable(e):
+            e['operacion'] = construir_operacion(e, None)
+        escaneos.append(e)
+    return escaneos
+
+
 def escanear_completo(cutoff=None, verbose=False, symbol=SYMBOL):
     """Escaneo global + escaneo por tramos, fusionados: las zonas que solo
     existen en la vista por tramos (las que la concurrencia global absorbió —

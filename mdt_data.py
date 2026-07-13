@@ -8,10 +8,21 @@ REQUEST_TIMEOUT = 15  # segundos: el bot nunca debe quedarse colgado esperando a
 
 
 def to_cot(serie_o_ts):
-    """Convierte open_time naive-UTC (como lo devuelve get_binance_klines) a hora Bogotá."""
+    """Convierte open_time naive-UTC (como lo devuelve get_binance_klines) a hora Bogotá.
+
+    IDEMPOTENTE a propósito: si ya viene en COT lo deja igual. Media estrategia
+    pasa por aquí y los tiempos viajan mezclados (el escáner ya convierte sus
+    velas); localizar dos veces reventaba con TypeError, y ese error acababa
+    tragado en un `except` que devolvía la hora en crudo.
+    """
     if hasattr(serie_o_ts, 'dt'):
-        return serie_o_ts.dt.tz_localize('UTC').dt.tz_convert(TZ_LOCAL)
-    return pd.Timestamp(serie_o_ts).tz_localize('UTC').tz_convert(TZ_LOCAL)
+        if serie_o_ts.dt.tz is None:
+            return serie_o_ts.dt.tz_localize('UTC').dt.tz_convert(TZ_LOCAL)
+        return serie_o_ts.dt.tz_convert(TZ_LOCAL)
+    ts = pd.Timestamp(serie_o_ts)
+    if ts.tzinfo is None:
+        ts = ts.tz_localize('UTC')
+    return ts.tz_convert(TZ_LOCAL)
 
 def _fetch_klines(url, params):
     """GET con timeout y validación: Binance devuelve un dict (no lista) en errores/rate-limit."""
