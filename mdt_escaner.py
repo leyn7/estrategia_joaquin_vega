@@ -7,89 +7,23 @@ del ciclo (Secc 10: "bajar una temporalidad por debajo del tamaño del ciclo que
 se está trabajando"). Cada resultado lleva el ancla de su ciclo: un bucle en
 vivo debe re-validar con ancla_viva(mapa_fresco, ancla) antes de armar o
 disparar cualquier entrada (candado mapa->escáner).
+
+Este archivo ORQUESTA el escaneo; lo que decide y lo que se imprime vive aparte:
+  mdt_operacion.py        las 4 Informaciones de una señal (Secc 7) + prioridad
+  mdt_duelos.py           duelos de patrones entre tramos (calidad del patrón)
+  mdt_reporte_escaner.py  los textos por consola
 """
 import pandas as pd
-from mdt_config import SYMBOL, TF_PATRON, TF_MINUTOS, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
+from mdt_config import SYMBOL, TF_PATRON, TF_MINUTOS, ZONA_MAX_OPERABLE_PCT
 from mdt_data import to_cot
-from mdt_gestion import entrada_de_resultado
+from mdt_duelos import duelos_entre_tramos
 from mdt_macro_mapper import generar_mapa, reporte_tramos, _descargar, _ahora, ancla_viva
+from mdt_operacion import (ESTADOS_OPERABLES, construir_operacion,  # noqa: F401
+                           direccion_prioritaria, es_accionable)
+from mdt_reporte_escaner import imprimir_escaneo_mapa, imprimir_escaneo_tramos
+from mdt_patrones import detect_patron_institucional
 
 VELAS_ESCANEO = 1500  # ventana máxima de velas de la TF del patrón
-
-# Estados que representan un setup accionable o vivo (para resaltar en el reporte)
-ESTADOS_OPERABLES = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO",
-                     "EE_GATILLO", "EE_ARMADO", "VALIDADO_POSTERIOR",
-                     "ENTRADA_PROFUNDA_ESPERANDO", "DT_IMPULSO_ESPERANDO",
-                     "ENGAÑO_EN_CURSO", "ESPERANDO_1618")
-
-
-def direccion_prioritaria(mapa):
-    """Regla del usuario (4 jul): "el que manda es el ciclo cuya zona se está
-    trabajando ACTIVAMENTE" — la zona MÁS ESPECÍFICA (la más angosta) que contiene
-    al precio, no la más grande que lo envuelva.
-
-    Refinada (10 jul): las zonas macro de CONTEXTO no mandan — si no se operan,
-    tampoco dictan la prioridad (caso real: la Media del Macro Alcista 638-410
-    dictaba COMPRAS y marcaba Secundaria una venta nacida de un trabajo real).
-    Esta dirección global queda como contexto del mapa; la prioridad de cada
-    señal la hereda de SU propia zona en trabajo (_operacion)."""
-    precio = mapa['precio']
-    candidatos = [("SELL", z) for z in mapa['sells']] + [("BUY", z) for z in mapa['buys']]
-    contienen = [(lado, z) for lado, z in candidatos
-                 if z.get('z') and min(z['z']) <= precio <= max(z['z'])
-                 and (max(z['z']) - min(z['z'])) <= precio * ZONA_MAX_OPERABLE_PCT]
-    if not contienen:
-        return None, None
-    lado, z = min(contienen, key=lambda t: max(t[1]['z']) - min(t[1]['z']))
-    return lado, z['name']
-
-
-def _operacion(escaneo, prioritaria):
-    """Construye las 4 Informaciones (Secc 7) de una señal accionable:
-    entrada, SL estructural, TP (zona contraria / 61.8 de alerta), ratio mínimo
-    1:3 (Secc 1, al borde cercano de la zona objetivo — conservador) y la
-    etiqueta Prioritario/Secundario con su volumen."""
-    res = escaneo['resultado']
-    d = res.get('detalles', {})
-    lado = escaneo['lado']
-    hechos = entrada_de_resultado(res, lado, escaneo['rango'])
-    if hechos is not None:
-        # Gatillo EJECUTADO: extracción unificada (mdt_gestion, misma que
-        # usan el registro de operaciones reales y el backtest)
-        entrada, sl, _ = hechos
-    else:
-        # Patrón sin gatillo aún: VISTA PREVIA de la operación (entrada
-        # calmada esperada / cruce del límite en el EE armado)
-        entrada = (d.get('gatillo_agresivo') or d.get('entrada_p3_corta')
-                   or d.get('entrada_dt_618') or d.get('espera_calmada'))
-        if entrada is None and res['estado'].startswith('EE_'):
-            entrada = escaneo['rango'][0] if lado == "SELL" else escaneo['rango'][1]
-        sl = d.get('stop_loss', d.get('extremo_escape'))
-    tp_zona = escaneo.get('tp_zona')
-    if entrada is None or sl is None or tp_zona is None:
-        return None
-    tp = max(tp_zona) if lado == "SELL" else min(tp_zona)  # borde cercano (conservador)
-    riesgo = abs(sl - entrada)
-    if riesgo <= 0:
-        return None
-    recompensa = abs(entrada - tp)
-    ratio = recompensa / riesgo
-    # Regla del usuario (10 jul): la señal HEREDA la prioridad de SU zona — si
-    # una zona en trabajo te da la entrada, esa operación es el Movimiento
-    # Prioritario de ese trabajo, con sus propios TP ("en el trading nada es
-    # seguro: cada oportunidad que se opere tendrá sus propios TP"). La
-    # dirección global (zona más angosta no-contexto con el precio dentro) ya
-    # no degrada la señal a Secundaria; si hay trabajo vivo en contra, se avisa.
-    aviso = None
-    if prioritaria is not None and lado != prioritaria:
-        aviso = ("hay trabajo vivo en contra: el precio está dentro de una zona de "
-                 + ("VENTAS" if prioritaria == "SELL" else "COMPRAS"))
-    return {"entrada": entrada, "stop_loss": sl,
-            "tp_zona": (max(tp_zona), min(tp_zona)), "tp_nivel": tp,
-            "riesgo": riesgo, "recompensa": recompensa, "ratio": ratio,
-            "cumple_ratio": ratio >= RATIO_MINIMO,
-            "movimiento": "PRIORITARIO (su zona en trabajo)", "aviso": aviso,
-            "volumen": "Normal"}
 
 
 def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio):
@@ -99,7 +33,6 @@ def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio):
     ventana arranca en operativa_desde (activación del ciclo o apertura de la
     excursión); la estructura anterior es historia de otro contexto.
     """
-    from mdt_patrones import detect_patron_institucional
     tf_patron = TF_PATRON.get(zona['tf'], zona['tf'])
     if tf_patron not in cache_df:
         desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * TF_MINUTOS[tf_patron])
@@ -147,99 +80,13 @@ def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     # Las 4 Informaciones (Secc 7) para cada señal accionable (no-contexto)
     prioritaria, zona_que_manda = direccion_prioritaria(mapa)
     for e in escaneos:
-        if e['resultado']['estado'] in ESTADOS_OPERABLES and not e['contexto']:
-            e['operacion'] = _operacion(e, prioritaria)
+        if es_accionable(e):
+            e['operacion'] = construir_operacion(e, prioritaria)
 
     if verbose:
-        if zona_que_manda:
-            print(f"\nTRABAJO ACTUAL DEL PRECIO: dentro de '{zona_que_manda}' "
-                  f"({'COMPRAS' if prioritaria == 'BUY' else 'VENTAS'}) — cada señal "
-                  "hereda la prioridad de su propia zona")
-        print("\n--- ESCÁNER DE PATRONES SOBRE EL MAPA (TF del patrón = 1 por debajo del ciclo) ---")
-        for e in escaneos:
-            res = e['resultado']
-            marca = " <<<" if res['estado'] in ESTADOS_OPERABLES and not e['contexto'] else ""
-            ctx = " [ZONA MACRO: contexto, no se opera]" if e['contexto'] else ""
-            print(f"[{e['lado']}] {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f} "
-                  f"(ciclo {e['tf_ciclo']} -> patrón {e['tf_patron']}, ancla {e['ancla']:.2f}){ctx}")
-            # Trabajos de la zona (regla usuario 6 jul): TODA la cadena evaluada en el
-            # episodio operativo — el usuario necesita ver si la zona YA fue trabajada
-            # (entradas profundas, engaños, EE...), no solo el estado vigente.
-            previos = [h for h in (res.get('historial') or []) if h is not res]
-            for k, h in enumerate(previos, 1):
-                dh = h.get('detalles', {})
-                hora_h = dh.get('hora_gatillo') or dh.get('hora_validacion') or dh.get('pauta1_time')
-                hora_h_txt = f" @ {hora_h}" if hora_h is not None else ""
-                print(f"      trabajo {k}: {h['estado']}{hora_h_txt} — {h['mensaje']}")
-            d_res = res.get('detalles', {})
-            hora = d_res.get('hora_gatillo')
-            hora_txt = f" [gatillo: {hora}]" if hora is not None else ""
-            lleg = d_res.get('calidad_llegada')
-            lleg_txt = ""
-            if lleg == "BARRIDO":
-                lleg_txt = (f" [LLEGADA: BARRIDO ⚡ mecha {d_res.get('mecha_vs_cuerpo')}x, "
-                            f"{d_res.get('velas_visita')} vela(s)]")
-            elif lleg == "LENTA":
-                lleg_txt = f" [LLEGADA: LENTA — {d_res.get('cierres_dentro')} cierres dentro]"
-            pref = f"trabajo {len(previos) + 1} (vigente): " if previos else ""
-            print(f"      {pref}{res['estado']}: {res['mensaje']}{hora_txt}{lleg_txt}{marca}")
-            op = e.get('operacion')
-            if op:
-                veredicto = (f"CUMPLE 1:{RATIO_MINIMO:.0f}" if op['cumple_ratio']
-                             else f"NO CUMPLE 1:{RATIO_MINIMO:.0f} -> NO OPERAR (Secc 1)")
-                print(f"      OPERACIÓN: entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
-                      f"(riesgo {op['riesgo']:.2f}) | TP zona {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f} "
-                      f"(al borde: {op['recompensa']:.2f})")
-                print(f"      R:B 1:{op['ratio']:.1f} [{veredicto}] | {op['movimiento']} "
-                      f"| Volumen: {op['volumen']}")
-                if op.get('aviso'):
-                    print(f"      AVISO: {op['aviso']}")
+        imprimir_escaneo_mapa(escaneos, prioritaria, zona_que_manda)
     return {'mapa': mapa, 'escaneos': escaneos,
             'prioritaria': prioritaria, 'zona_que_manda': zona_que_manda}
-
-
-def _puntaje_patron(e):
-    """Calidad del patrón para el DUELO entre tramos (regla usuario 12 jul:
-    "cuando tengamos patrones que concurran en zona con otras [de otro tramo],
-    miraremos en cuál patrón operaremos dependiendo de la calidad del patrón").
-    Orden: llegada BARRIDO > NORMAL > LENTA; gatillo vivo > en espera;
-    proporcional; sin carencia implícita en estado; ratio como desempate."""
-    res = e['resultado']
-    d = res.get('detalles', {})
-    lleg = {'BARRIDO': 2, 'NORMAL': 1, 'LENTA': 0}.get(d.get('calidad_llegada'), 1)
-    gatillo = 1 if 'GATILLO' in res['estado'] else 0
-    prop = 1 if d.get('proporcional') else 0
-    op = e.get('operacion') or {}
-    return (lleg, gatillo, prop, op.get('ratio', 0.0))
-
-
-def _rangos_solapan(a, b):
-    return min(a[0], b[0]) >= max(a[1], b[1])  # rangos son (max, min)
-
-
-def duelos_entre_tramos(escaneos):
-    """Duelos de patrones: señales accionables del MISMO lado cuyas zonas
-    concurren (se solapan) pero pertenecen a TRAMOS DISTINTOS — dentro del
-    tramo manda la concurrencia de zonas (Secc 19); entre tramos decide la
-    CALIDAD del patrón. Devuelve grupos ordenados: el primero es el ganador."""
-    acc = [e for e in escaneos
-           if e['resultado']['estado'] in ESTADOS_OPERABLES and not e['contexto']
-           and e.get('tramo') is not None]
-    grupos = []
-    for e in acc:
-        for g in grupos:
-            if (g[0]['lado'] == e['lado']
-                    and any(_rangos_solapan(x['rango'], e['rango']) for x in g)):
-                g.append(e)
-                break
-        else:
-            grupos.append([e])
-    duelos = []
-    for g in grupos:
-        if len({x['tramo'] for x in g}) >= 2:
-            g.sort(key=_puntaje_patron, reverse=True)
-            duelos.append(g)
-    return duelos
 
 
 def escanear_tramos(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
@@ -265,38 +112,14 @@ def escanear_tramos(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
                 continue
             e = _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, mapa['precio'])
             e['tramo'] = t['nombre']
-            if e['resultado']['estado'] in ESTADOS_OPERABLES and not e['contexto']:
+            if es_accionable(e):
                 # La señal hereda la prioridad de SU zona (regla 10 jul)
-                e['operacion'] = _operacion(e, None)
+                e['operacion'] = construir_operacion(e, None)
             escaneos.append(e)
     duelos = duelos_entre_tramos(escaneos)
 
     if verbose:
-        print("\n--- ESCÁNER DE PATRONES POR TRAMO (zonas independientes por muñeca) ---")
-        for e in escaneos:
-            res = e['resultado']
-            if res['estado'] == 'NO_INICIADO':
-                continue
-            marca = " <<<" if res['estado'] in ESTADOS_OPERABLES and not e['contexto'] else ""
-            ctx = " [contexto]" if e['contexto'] else ""
-            d = res.get('detalles', {})
-            lleg = d.get('calidad_llegada')
-            lleg_txt = f" [LLEGADA: {lleg}]" if lleg and lleg != 'NORMAL' else ""
-            print(f"[{e['tramo']}] [{e['lado']}] {e['zona']} "
-                  f"{e['rango'][0]:.2f}-{e['rango'][1]:.2f}{ctx}")
-            print(f"      {res['estado']}: {res['mensaje'][:110]}{lleg_txt}{marca}")
-            op = e.get('operacion')
-            if op:
-                print(f"      OPERACIÓN: entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
-                      f"| TP {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f} | R:B 1:{op['ratio']:.1f}")
-        for g in duelos:
-            gana = g[0]
-            print(f"\n🥇 DUELO ({'VENTAS' if gana['lado'] == 'SELL' else 'COMPRAS'} concurrentes "
-                  f"entre tramos): GANA {gana['zona']} [{gana['tramo']}] "
-                  f"(llegada {gana['resultado'].get('detalles', {}).get('calidad_llegada', '?')}, "
-                  f"{gana['resultado']['estado']})")
-            for x in g[1:]:
-                print(f"      pierde: {x['zona']} [{x['tramo']}] ({x['resultado']['estado']})")
+        imprimir_escaneo_tramos(escaneos, duelos)
     return {'mapa': mapa, 'escaneos': escaneos, 'duelos': duelos}
 
 

@@ -6,7 +6,7 @@ convertir los resultados del escáner en texto legible para el operador.
 """
 from mdt_config import RATIO_MINIMO
 from mdt_data import to_cot
-from mdt_escaner import ESTADOS_OPERABLES
+from mdt_operacion import ESTADOS_OPERABLES
 
 
 def hora_cot(ts):

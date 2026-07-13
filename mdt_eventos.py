@@ -20,7 +20,7 @@ import os
 import pandas as pd
 
 from mdt_config import ZONA_MAX_OPERABLE_PCT
-from mdt_escaner import ESTADOS_OPERABLES
+from mdt_operacion import ESTADOS_OPERABLES
 from mdt_estado import INTERVALO, naive, podar_firmas
 from mdt_formato import hora_cot, resumen_analisis, texto_escaneo
 from mdt_ops import actualizar_operaciones, texto_operaciones
