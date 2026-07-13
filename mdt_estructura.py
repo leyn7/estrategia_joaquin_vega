@@ -11,7 +11,8 @@ a mano desde Telegram.
 """
 import pandas as pd
 
-from mdt_config import SYMBOL, ORIGENES_MACRO_MANUAL, NIVEL_382, NIVEL_618
+from mdt_config import (SYMBOL, TZ_LOCAL, TF_MINUTOS, MAX_VELAS_DESCARGA,
+                        ORIGENES_MACRO_MANUAL, NIVEL_382, NIVEL_618)
 from mdt_feed import ahora, descargar
 
 
@@ -95,25 +96,69 @@ def derivar_estructura_macro(df_1d, symbol=SYMBOL, verbose=True):
     return {'origen_idx': origen_idx, 'ath_idx': ath_idx, 'fondo_idx': fondo_idx}
 
 
+TF_BUSQUEDA = ("1m", "3m", "15m", "30m", "1h", "2h", "4h", "1d")
+TOL_ANCLA_PCT = 0.0005   # 0.05% del precio: dos toques dentro de esto son "el mismo nivel"
+EPS_ANCLA = 1e-9         # dos coincidencias así de parejas son EL MISMO punto: manda la reciente
+
+
+def _a_utc(t_cot):
+    """Hora del operador (COT, sin zona) -> UTC sin zona, como vienen las velas."""
+    return pd.Timestamp(t_cot).tz_localize(TZ_LOCAL).tz_convert('UTC').tz_localize(None)
+
+
 def localizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None,
-                    tf="30m", dias=240):
+                    tf="30m", dias=240, fecha=None):
     """Ubica en el gráfico el ancla que el operador marcó y decide su sentido.
 
     Un ancla alcista es un MÍNIMO (origen de un impulso al alza); una bajista es
-    un MÁXIMO. Se busca la vela cuyo low (o high) más se acerque al precio dado;
-    sin sentido explícito, gana la coincidencia más exacta.
-    Devuelve (hora_ancla, direction, precio_real) o None.
+    un MÁXIMO. Se busca la vela cuyo low (o high) más se acerque al precio dado.
+
+    Dos precisiones que el operador pidió (13 jul), porque un precio suelto es
+    ambiguo:
+      - `fecha` (día en HORA DEL OPERADOR, COT): la búsqueda se encierra en ese
+        día. Sin ella se miran los últimos `dias`.
+      - `tf`: resolución de BÚSQUEDA del punto, no del análisis — el análisis
+        sigue siendo fractal (cascada 1d->1m). Un ancla de mecha fina no existe
+        en 30m: `tf="1m"` la encuentra. El presupuesto de descarga acota la
+        ventana sola (240 días de 1m no existen).
+
+    Cuando el mismo nivel fue tocado varias veces manda EL MÁS RECIENTE (el que
+    el operador está viendo en el gráfico) y los demás se devuelven como
+    alternativas — antes se elegía el más antiguo en silencio.
+
+    Devuelve (hora_ancla, direction, precio_real, alternativas) o None.
     """
+    minutos = TF_MINUTOS.get(tf)
+    if minutos is None:
+        return None
     limite = pd.Timestamp(cutoff) if cutoff is not None else ahora()
-    df = descargar(tf, limite - pd.Timedelta(days=dias), cutoff, symbol)
+    if fecha is not None:
+        desde = _a_utc(pd.Timestamp(fecha).normalize())
+        limite = min(limite, desde + pd.Timedelta(days=1))
+    else:
+        # El presupuesto de descarga manda: en 1m no hay 240 días de histórico
+        dias = min(dias, max(1, int(MAX_VELAS_DESCARGA * minutos / 1440)))
+        desde = limite - pd.Timedelta(days=dias)
+    df = descargar(tf, desde, limite, symbol)
     if not len(df):
         return None
-    i_lo = int((df['low'] - precio_ancla).abs().idxmin())
-    i_hi = int((df['high'] - precio_ancla).abs().idxmin())
-    err_lo = abs(float(df.loc[i_lo, 'low']) - precio_ancla)
-    err_hi = abs(float(df.loc[i_hi, 'high']) - precio_ancla)
+
+    err_lo = (df['low'] - precio_ancla).abs()
+    err_hi = (df['high'] - precio_ancla).abs()
     if direction is None:
-        direction = "BULLISH" if err_lo <= err_hi else "BEARISH"
-    if direction == "BULLISH":
-        return df.loc[i_lo, 'open_time'], direction, float(df.loc[i_lo, 'low'])
-    return df.loc[i_hi, 'open_time'], direction, float(df.loc[i_hi, 'high'])
+        direction = "BULLISH" if err_lo.min() <= err_hi.min() else "BEARISH"
+    col, err = ('low', err_lo) if direction == "BULLISH" else ('high', err_hi)
+
+    # Manda el precio que dio el operador: gana la coincidencia MÁS EXACTA. Solo
+    # cuando el mismo punto se repite (varios toques igual de exactos) desempata
+    # el MÁS RECIENTE — el que él está viendo en el gráfico; antes ganaba el más
+    # antiguo en silencio.
+    mejor = float(err.min())
+    elegido = df[err <= mejor + EPS_ANCLA].iloc[-1]
+    # Otros toques del MISMO nivel (dentro de la tolerancia): no cambian el ancla,
+    # solo avisan de que el precio suelto era ambiguo.
+    tol = max(mejor, precio_ancla * TOL_ANCLA_PCT)
+    otros = df[(err <= tol) & (df['open_time'] != elegido['open_time'])]
+    alternativas = [(t, float(p)) for t, p in
+                    zip(otros['open_time'], otros[col])][-3:]
+    return elegido['open_time'], direction, float(elegido[col]), alternativas

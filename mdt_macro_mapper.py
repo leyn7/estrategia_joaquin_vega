@@ -185,15 +185,20 @@ def _imprimir_zonas(buys, sells, alerts, precio):
     print(f"\nPRECIO ACTUAL: {precio:.2f}")
 
 
-def analizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None):
+def analizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None,
+                   tf_busqueda="30m", fecha=None):
     """Mapa del tramo que marcó el OPERADOR: desde su ancla hasta el extremo
     vigente (regla usuario 13 jul: "si le envío un ancla es desde ahí hasta el
     precio máximo o mínimo"). Los ciclos traen su estado y las zonas ya llevan
-    aplicada la concurrencia interna del tramo."""
-    loc = localizar_ancla(precio_ancla, symbol, cutoff, direction)
+    aplicada la concurrencia interna del tramo.
+
+    `tf_busqueda` y `fecha` solo acotan DÓNDE se busca el punto del ancla; el
+    análisis que sale de ahí es fractal como siempre (cascada 1d -> 1m)."""
+    loc = localizar_ancla(precio_ancla, symbol, cutoff, direction,
+                          tf=tf_busqueda, fecha=fecha)
     if loc is None:
         return None
-    t_ancla, direction, precio_real = loc
+    t_ancla, direction, precio_real, alternativas = loc
 
     res = analizar_tramo(f"Ancla {precio_real:.2f}", t_ancla, None, direction,
                          cutoff, verbose=False, symbol=symbol)
@@ -209,7 +214,8 @@ def analizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None):
     return {'ancla': precio_real, 'ancla_time': t_ancla, 'direction': direction,
             'origen': res['origen'], 'extremo': res['extremo'],
             'ciclos': res['ciclos'], 'zonas': zonas, 'alerts': alerts,
-            'reset_618': res.get('reset_618'), 'precio': precio}
+            'reset_618': res.get('reset_618'), 'precio': precio,
+            'alternativas': alternativas, 'tf_busqueda': tf_busqueda}
 
 
 def ancla_viva(mapa, ancla, tol=1e-6):

@@ -7,11 +7,13 @@ antes de ponerse a trabajar: el escaneo completo puede tomar minutos.
 """
 import logging
 
+import pandas as pd
 import requests
 
 import mdt_telegram
-from mdt_config import SYMBOL
+from mdt_config import SYMBOL, TZ_LOCAL
 from mdt_escaner import escanear_completo
+from mdt_estructura import TF_BUSQUEDA
 from mdt_estado import guardar_estado
 from mdt_formato import resumen_analisis
 from mdt_ops import texto_operaciones
@@ -29,7 +31,10 @@ AYUDA = ("Comandos:\n"
          "  ancla PRECIO [SYM] — mapea ese tramo (ciclos + zonas) y lo VIGILA;\n"
          "     avisa cuando el precio entre en una zona operativa suya.\n"
          "     Sentido automático (mínimo=alcista / máximo=bajista).\n"
-         "     Forzarlo: ancla 560.58 alcista\n"
+         "     Forzarlo:  ancla 560.58 alcista\n"
+         "     Mecha fina: ancla 578.81 1m   (TF solo para BUSCAR el punto;\n"
+         "       el análisis sigue siendo fractal. 1m 3m 15m 30m 1h 2h 4h 1d)\n"
+         "     Nivel repetido: ancla 560.58 08/07   (fecha en tu horario)\n"
          "  anclas — las anclas que estoy vigilando\n"
          "  borra ancla PRECIO — dejar de vigilarla\n"
          "  ayuda — esto")
@@ -53,23 +58,59 @@ def _cmd_lista(estado):
     return "Vigilando:\n" + '\n'.join(lineas)
 
 
+def _fecha_ancla(tok):
+    """Fecha del ancla EN HORA DEL OPERADOR (COT). Acepta 08/07, 8-7, 2026-07-08.
+    Sin año, el del día de hoy (o el anterior si la fecha aún no ha llegado)."""
+    t = tok.replace('-', '/').replace('.', '/')
+    trozos = [x for x in t.split('/') if x]
+    if not all(x.isdigit() for x in trozos):
+        return None
+    hoy = pd.Timestamp.now(tz=TZ_LOCAL).tz_localize(None).normalize()
+    try:
+        if len(trozos) == 3 and len(trozos[0]) == 4:      # 2026/07/08
+            f = pd.Timestamp(int(trozos[0]), int(trozos[1]), int(trozos[2]))
+        elif len(trozos) == 3:                            # 08/07/2026
+            f = pd.Timestamp(int(trozos[2]), int(trozos[1]), int(trozos[0]))
+        elif len(trozos) == 2:                            # 08/07 -> año en curso
+            f = pd.Timestamp(hoy.year, int(trozos[1]), int(trozos[0]))
+            if f > hoy:
+                f = pd.Timestamp(hoy.year - 1, int(trozos[1]), int(trozos[0]))
+        else:
+            return None
+    except ValueError:
+        return None
+    return f
+
+
 def _cmd_ancla(estado, partes):
-    """ancla PRECIO [SYM] [alcista|bajista] — mapea ese tramo y lo deja vigilado."""
+    """ancla PRECIO [SYM] [alcista|bajista] [TF] [FECHA] — mapea ese tramo y lo vigila.
+
+    TF y FECHA solo acotan DÓNDE se busca el punto del ancla (regla usuario 13
+    jul): una mecha fina no existe en 30m, y un nivel tocado varias veces es
+    ambiguo. El análisis que sale de ahí sigue siendo fractal.
+    """
     try:
         precio_a = float(partes[1].replace(',', '.'))
     except ValueError:
-        return "Uso: ancla 560.58 [SYM] [alcista|bajista]"
+        return "Uso: ancla 560.58 [SYM] [alcista|bajista] [TF] [FECHA]"
     resto = [p.lower() for p in partes[2:]]
     sym = next((p.upper() for p in partes[2:] if p.upper().endswith('USDT')), SYMBOL)
     direccion = ("BULLISH" if 'alcista' in resto else
                  "BEARISH" if 'bajista' in resto else None)
-    mdt_telegram.enviar(estado['chat_id'],
-                        f"⚓ Mapeando el tramo desde {precio_a:.2f}... (1-3 min)")
+    tf_b = next((p for p in resto if p in TF_BUSQUEDA), "30m")
+    fecha = next((f for f in (_fecha_ancla(p) for p in resto) if f is not None), None)
+
+    aviso = f"⚓ Mapeando el tramo desde {precio_a:.2f} (busco en {tf_b}"
+    aviso += f", día {fecha.strftime('%d/%m')})..." if fecha is not None else ")..."
+    mdt_telegram.enviar(estado['chat_id'], aviso + " (1-3 min)")
     try:
         from mdt_macro_mapper import analizar_ancla, reporte_ancla
-        a = analizar_ancla(precio_a, symbol=sym, direction=direccion)
+        a = analizar_ancla(precio_a, symbol=sym, direction=direccion,
+                           tf_busqueda=tf_b, fecha=fecha)
         if a is None:
-            return f"No pude ubicar el ancla {precio_a:.2f} en el gráfico de {sym}."
+            return (f"No pude ubicar el ancla {precio_a:.2f} en el gráfico de {sym}"
+                    + (f" el {fecha.strftime('%d/%m')} (¿otra fecha?)." if fecha is not None
+                       else f" buscando en {tf_b}."))
         estado.setdefault('anclas', {})[f"{sym}|{a['ancla']:.2f}"] = {
             'symbol': sym, 'ancla': a['ancla'], 'direction': a['direction'],
             'zonas_vistas': {},

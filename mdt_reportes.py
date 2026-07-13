@@ -6,7 +6,13 @@ Dos vistas, ambas nacidas de reglas suyas:
     solo los ciclos que conservan zonas operables tras la concurrencia interna.
   - Por ANCLA (13 jul): el tramo que él marca a mano desde Telegram.
 """
+from mdt_data import to_cot
 from mdt_zonas import zonas_finales_tramo
+
+
+def _hora(t):
+    """Hora del operador (COT): las velas viajan en UTC por dentro."""
+    return str(to_cot(t))[:16]
 
 
 def _bandas_por_ancla(zonas):
@@ -27,8 +33,21 @@ def reporte_ancla(a):
     quedaron sin ninguna se omiten) y dónde está el precio respecto a ellas."""
     precio = a['precio']
     sentido = "alcista" if a['direction'] == 'BULLISH' else "bajista"
+    # La hora del ancla se muestra en HORA DEL OPERADOR (COT): las velas vienen
+    # en UTC y salía con 5 horas de más — imposible de reconocer en su gráfico.
     L = [f"⚓ ANCLA {a['ancla']:.2f} ({sentido}) → extremo {a['extremo']:.2f}",
-         f"   precio {precio:.2f} | {str(a['ancla_time'])[:16]}"]
+         f"   precio {precio:.2f} | ancla del {_hora(a['ancla_time'])}"
+         f" (busqueda en {a.get('tf_busqueda', '30m')})"]
+    alt = a.get('alternativas') or []
+    if alt:
+        # Un precio suelto es ambiguo: se toma la coincidencia MÁS EXACTA (y entre
+        # toques iguales, el más reciente), pero el operador debe ver los otros
+        # candidatos por si el que él mira en su gráfico es otro.
+        otras = ', '.join(f"{p:.2f} del {_hora(t)[:10]}" for t, p in alt)
+        ej = _hora(alt[-1][0])
+        L.append(f"   ⚠ Ese nivel se tocó más veces ({otras}): tomé la coincidencia "
+                 f"exacta del {_hora(a['ancla_time'])[:10]}. Si querías otra, dime la "
+                 f"fecha: ancla {a['ancla']:.2f} {ej[8:10]}/{ej[5:7]}")
     if a.get('reset_618'):
         L.append(f"   ⚡ RESET 61.8 del tramo ({a['reset_618']['nivel']:.2f}): "
                  "los puntos de control internos ya no son válidos.")
