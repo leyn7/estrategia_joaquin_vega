@@ -64,12 +64,11 @@ def get_klines_vivo(symbol=SYMBOL, interval="1d", start_time=None):
     return df.copy()
 
 
-# El parche debe ocurrir ANTES de que el mapper/escáner se usen. mdt_macro_mapper
-# hace `from mdt_data import get_binance_klines` (enlaza el original), así que hay
-# que re-vincular también su nombre de módulo.
+# Un solo parche basta: mdt_feed busca `mdt_data.get_binance_klines` en CADA
+# llamada (no lo enlaza en el import), así que todo el motor respeta la caché.
+# (Antes había que parchear también mdt_macro_mapper — una trampa silenciosa: al
+# mover la descarga de módulo, el bot habría dejado de cachear sin avisar.)
 mdt_data.get_binance_klines = get_klines_vivo
-import mdt_macro_mapper  # noqa: E402
-mdt_macro_mapper.get_binance_klines = get_klines_vivo
 
 
 # ---------------------------------------------------------------------------
