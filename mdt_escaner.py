@@ -120,6 +120,7 @@ def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio):
     return {'zona': zona['name'], 'rango': (zmax, zmin), 'lado': lado,
             'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
             'ancla': zona.get('ancla'), 'tp_zona': zona.get('tp_zona'),
+            'ciclo_origen': zona.get('ciclo_origen'), 'ciclo_fin': zona.get('ciclo_fin'),
             'contexto': es_contexto, 'operativa_desde': desde_op, 'resultado': res}
 
 

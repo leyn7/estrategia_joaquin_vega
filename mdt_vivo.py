@@ -98,14 +98,15 @@ ESTADOS_HITO = ("ANULADO_POR_CARENCIA", "ROTO_POR_DOBLE_TOQUE", "ROTO_POR_STOP_L
 ESTADOS_PROFUNDO = ("ENTRADA_PROFUNDA_ESPERANDO", "P3_CORTA_GATILLO",
                     "EE_ARMADO", "EE_GATILLO")
 
-# Qué notificar (regla usuario 8 jul 2026): por defecto SOLO el Engaño Profundo
-# con su ancla. Ajustable por .env sin tocar código:
+# Qué notificar (regla usuario 12 jul 2026): por defecto SOLO los PATRONES DE
+# OPERACIÓN — patrón formado con sus datos completos (entrada, SL, TP, ancla y
+# recorrido del ciclo). Ajustable por .env sin tocar código:
 #   MDT_NOTIF_ACTIVACION=1  -> también avisa activaciones del 38.2
 #   MDT_NOTIF_ZONA=1        -> también avisa llegadas del precio a una zona
-#   MDT_NOTIF_PATRON=operables|todos  -> amplía más allá del engaño profundo
+#   MDT_NOTIF_PATRON=profundo|operables|todos  -> otros filtros de patrón
 NOTIF_ACTIVACION = os.environ.get('MDT_NOTIF_ACTIVACION', '0') == '1'
 NOTIF_ZONA = os.environ.get('MDT_NOTIF_ZONA', '0') == '1'
-NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'profundo').lower()
+NOTIF_PATRON = os.environ.get('MDT_NOTIF_PATRON', 'operacion').lower()
 # MDT_NOTIF_LLEGADA=barrido -> solo notifica patrones nacidos de una llegada
 # BARRIDO (la mechita: toca y sale). Vacío = notifica todas (marcadas).
 NOTIF_LLEGADA = os.environ.get('MDT_NOTIF_LLEGADA', '').lower()
@@ -199,8 +200,13 @@ def _texto_escaneo(e):
     d = res.get('detalles', {})
     hora = _hora_cot(d.get('hora_gatillo') or d.get('hora_validacion'))
     tramo_txt = f" [tramo {e['tramo']}]" if e.get('tramo') else ""
+    if e.get('ciclo_origen') is not None and e.get('ciclo_fin') is not None:
+        ciclo_txt = (f"  CICLO: {e['ciclo_origen']:.2f} → {e['ciclo_fin']:.2f} "
+                     f"(ancla {e['ancla']:.2f}, {e['tf_ciclo']}) | patrón {e['tf_patron']}")
+    else:
+        ciclo_txt = f"  ciclo {e['tf_ciclo']} (ancla {e['ancla']:.2f}) -> patrón {e['tf_patron']}"
     txt = (f"{res['estado']} en {e['zona']} {e['rango'][0]:.2f}-{e['rango'][1]:.2f}{tramo_txt}\n"
-           f"  ciclo {e['tf_ciclo']} (ancla {e['ancla']:.2f}) -> patrón {e['tf_patron']}\n"
+           f"{ciclo_txt}\n"
            f"  {res['mensaje']}")
     lleg = d.get('calidad_llegada')
     if lleg == "BARRIDO":
@@ -456,7 +462,10 @@ def detectar_eventos(sym, resultado, mem):
             continue
         res = e['resultado']
         estado = res['estado']
-        if NOTIF_PATRON == 'profundo':
+        if NOTIF_PATRON == 'operacion':
+            # Patrón DE OPERACIÓN formado: trae entrada/SL/TP calculados
+            interesa = e.get('operacion') is not None
+        elif NOTIF_PATRON == 'profundo':
             interesa = estado in ESTADOS_PROFUNDO
         elif NOTIF_PATRON == 'operables':
             interesa = estado in ESTADOS_OPERABLES or estado in ESTADOS_HITO

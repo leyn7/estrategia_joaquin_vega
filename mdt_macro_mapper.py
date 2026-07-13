@@ -351,6 +351,7 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
             # del 61.8% de Alerta del nuevo Fibo Mayor (extremo excursión -> fin).
             tp_zona = calc_zones(ev['extremo_excursion'], ev['fin_vigente'], direction)['MEDIA']
             extra = {"tf": c['tf'], "ancla": c['ancla'],
+                     "ciclo_origen": ev['origen_vigente'], "ciclo_fin": ev['fin_vigente'],
                      "operativa_desde": ev.get('hora_excursion'),
                      "nivel_anulacion": ev['nivel_muerte'],
                      "tp_zona": tp_zona}
@@ -399,6 +400,7 @@ def _registrar_ciclo(c, direction, buys, sells, alerts, verbose=True):
     # escáner de patrones solo debe mirar velas desde entonces (Secc 13, checklist 1:
     # "el precio está operando dentro de una Zona de Decisión ACTIVA").
     extra = {"tf": c['tf'], "ancla": c['ancla'],
+             "ciclo_origen": ev['origen_vigente'], "ciclo_fin": ev['fin_vigente'],
              "operativa_desde": ev.get('hora_activacion')}
     # Anulación de cada zona (Secc 4/17): el siguiente nivel fibo que la mata.
     # Baja -> extensión 138.2 | Media -> el origen (100%) | Alta -> extensión -38.2.
