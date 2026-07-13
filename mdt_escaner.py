@@ -333,6 +333,13 @@ if __name__ == "__main__":
     #   python mdt_escaner.py --symbol ETHUSDT         -> otra moneda
     #   python mdt_escaner.py --cutoff "2026-07-01 04:21"  (UTC, time-travel)
     import argparse
+    import sys
+    # La consola de Windows llega en cp1252 y revienta con los emojis del reporte
+    # (el motor ya había hecho todo el trabajo: sería una muerte por imprimir).
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
     ap = argparse.ArgumentParser(description="Análisis MDT completo de un símbolo")
     ap.add_argument("--symbol", default=SYMBOL, help="símbolo de futuros USDT-M (ej. ETHUSDT)")
     ap.add_argument("--cutoff", default=None, help="instante UTC para time-travel (default: ahora)")
