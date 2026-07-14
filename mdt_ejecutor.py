@@ -8,11 +8,27 @@ nada de este módulo se llama y el bot se comporta exactamente igual que antes.
 Diseño (a propósito conservador): la decisión de CUÁNDO entrar/salir la sigue
 dando mdt_gestion.gestionar() sobre velas reales — la misma que ya se validó
 toda la sesión. Este módulo no decide nada de estrategia: solo REPRODUCE esa
-decisión con órdenes reales en el testnet (firma, redondeo de cantidad/precio,
-rate limits, rechazos del exchange) y lleva la cuenta virtual en dólares.
+decisión con órdenes reales en el testnet (firma, redondeo, rate limits, rechazos
+del exchange) y devuelve lo que REALMENTE pasó (precio de llenado, P&L, comisión).
 
-Sizing: arriesga RIESGO_CUENTA_PCT del balance virtual ACTUAL (compone) en
-cada gatillo nuevo — cantidad = (balance * riesgo%) / distancia_al_SL.
+TRES COSAS QUE HAY QUE ENTENDER (auditoría 14 jul — sin ellas la simulación miente):
+
+1. MODO HEDGE OBLIGATORIO. En one-way Binance tiene UNA sola posición neta por
+   símbolo: el bot abre varias operaciones a la vez en BNBUSDT (compras Y ventas
+   concurrentes de zonas distintas), y una venta a mercado estando largo NO abre
+   un corto — REDUCE el largo. Con hedge (dualSidePosition) conviven LONG y SHORT
+   y cada orden dice a qué lado pertenece (positionSide). En hedge, las órdenes de
+   cierre NO llevan reduceOnly (Binance las rechaza): basta el positionSide.
+
+2. LAS ÓRDENES SE CANCELAN UNA A UNA. `cancelar_todas(symbol)` borraba el SL y el
+   TP de las OTRAS operaciones vivas del mismo símbolo — las dejaba a pelo.
+
+3. EL P&L SALE DE LOS LLENADOS REALES (userTrades: realizedPnl - commission), no
+   de la R teórica. Si no, el deslizamiento y las comisiones — justo lo que se
+   quiere medir con el testnet — quedan invisibles.
+
+Sizing: arriesga RIESGO_CUENTA_PCT del balance virtual ACTUAL (compone) en cada
+gatillo nuevo — cantidad = (balance * riesgo%) / distancia_al_SL.
 """
 import hashlib
 import hmac
@@ -23,7 +39,7 @@ import urllib.parse
 
 import requests
 
-from mdt_config import BALANCE_VIRTUAL_INICIAL, RIESGO_CUENTA_PCT
+from mdt_config import RIESGO_CUENTA_PCT
 
 log = logging.getLogger('mdt.ejecutor')
 
@@ -34,6 +50,7 @@ API_KEY = os.environ.get('MDT_BINANCE_TESTNET_KEY', '')
 API_SECRET = os.environ.get('MDT_BINANCE_TESTNET_SECRET', '').encode()
 
 _info_simbolo_cache = {}
+_hedge_ok = False          # se comprueba una vez por proceso
 
 
 class ErrorEjecucion(Exception):
@@ -67,6 +84,35 @@ def _request(method, path, params=None, firmado=True):
     return r.json()
 
 
+# ---------------------------------------------------------------------------
+# Modo hedge: sin él, una venta estando largo reduce el largo (no abre corto)
+# ---------------------------------------------------------------------------
+def asegurar_modo_hedge():
+    """Activa dualSidePosition si no lo estaba. Binance solo deja cambiarlo con
+    la cuenta SIN posiciones ni órdenes abiertas."""
+    global _hedge_ok
+    if _hedge_ok:
+        return
+    estado = _request('GET', '/fapi/v1/positionSide/dual')
+    if estado.get('dualSidePosition'):
+        _hedge_ok = True
+        return
+    try:
+        _request('POST', '/fapi/v1/positionSide/dual', {'dualSidePosition': 'true'})
+    except ErrorEjecucion as e:
+        raise ErrorEjecucion(
+            "La cuenta del testnet está en modo ONE-WAY y no se pudo cambiar a HEDGE "
+            "(Binance solo lo permite sin posiciones ni órdenes abiertas). En one-way, "
+            "una venta estando largo REDUCE el largo en vez de abrir un corto: las "
+            f"operaciones del bot no se reflejarían. Cierra todo en el testnet y reintenta. [{e}]") from e
+    _hedge_ok = True
+    log.info("testnet: modo HEDGE activado")
+
+
+def _position_side(lado):
+    return 'LONG' if lado == 'BUY' else 'SHORT'
+
+
 def info_simbolo(symbol):
     """Precisión de cantidad/precio del símbolo (exchangeInfo, público, cacheado)."""
     if symbol in _info_simbolo_cache:
@@ -97,8 +143,8 @@ def _redondear(valor, paso, precision):
 
 
 def balance_disponible_testnet():
-    """Balance USDT real del testnet (informativo, para cruzar contra la
-    cuenta virtual — NO es lo que se usa para dimensionar posiciones)."""
+    """Balance USDT real del testnet (informativo, para cruzar contra la cuenta
+    virtual — NO es lo que se usa para dimensionar posiciones)."""
     data = _request('GET', '/fapi/v2/balance', firmado=True)
     for b in data:
         if b['asset'] == 'USDT':
@@ -107,8 +153,8 @@ def balance_disponible_testnet():
 
 
 def calcular_cantidad(symbol, entrada, sl, balance_virtual):
-    """Cantidad (en el activo base) para arriesgar RIESGO_CUENTA_PCT del
-    balance virtual dado, según distancia al SL. Redondeada al step del symbol."""
+    """Cantidad (en el activo base) para arriesgar RIESGO_CUENTA_PCT del balance
+    virtual dado, según distancia al SL. Redondeada al step del símbolo."""
     riesgo_precio = abs(entrada - sl)
     if riesgo_precio <= 0:
         raise ErrorEjecucion("Riesgo en precio es cero: no se puede dimensionar.")
@@ -123,70 +169,114 @@ def calcular_cantidad(symbol, entrada, sl, balance_virtual):
     return cantidad
 
 
+def _precio_llenado(symbol, order_id, intentos=5):
+    """avgPrice REAL de una orden a mercado (lo que de verdad pagó, con
+    deslizamiento). Una MARKET llena al instante, pero se reintenta por si el
+    exchange aún no la reporta."""
+    for i in range(intentos):
+        o = _request('GET', '/fapi/v1/order', {'symbol': symbol, 'orderId': order_id})
+        precio = float(o.get('avgPrice') or 0)
+        if o.get('status') == 'FILLED' and precio > 0:
+            return precio
+        time.sleep(0.4 * (i + 1))
+    return None
+
+
 def abrir_posicion(symbol, lado, entrada, sl, tp, balance_virtual):
-    """Coloca ENTRADA a mercado + SL + TP reales en el testnet. Devuelve
-    {'cantidad', 'order_id_entrada', 'order_id_sl', 'order_id_tp'}."""
+    """ENTRADA a mercado + SL + TP reales en el testnet (modo hedge).
+
+    Devuelve {'cantidad', 'ordenes' (ids para cancelar sólo las suyas),
+    'order_id_sl', 'entrada_real' (precio de llenado), 'inicio_ms', 'position_side'}.
+    """
+    asegurar_modo_hedge()
     cantidad = calcular_cantidad(symbol, entrada, sl, balance_virtual)
     info = info_simbolo(symbol)
     sl_r = _redondear(sl, info['price_step'], info['price_precision'])
     tp_r = _redondear(tp, info['price_step'], info['price_precision'])
+    ps = _position_side(lado)
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
+    inicio_ms = int(time.time() * 1000) - 1000
 
     orden_entrada = _request('POST', '/fapi/v1/order', {
-        'symbol': symbol, 'side': lado, 'type': 'MARKET', 'quantity': cantidad,
+        'symbol': symbol, 'side': lado, 'positionSide': ps,
+        'type': 'MARKET', 'quantity': cantidad,
     })
-    log.info("testnet %s: ENTRADA %s %s qty=%s -> orderId=%s", symbol, lado,
-             entrada, cantidad, orden_entrada.get('orderId'))
+    id_entrada = orden_entrada.get('orderId')
+    entrada_real = _precio_llenado(symbol, id_entrada)
+    log.info("testnet %s: ENTRADA %s qty=%s -> orderId=%s llenó en %s (teórica %s)",
+             symbol, lado, cantidad, id_entrada, entrada_real, entrada)
 
-    orden_sl = _request('POST', '/fapi/v1/order', {
-        'symbol': symbol, 'side': cierre, 'type': 'STOP_MARKET',
-        'stopPrice': sl_r, 'quantity': cantidad, 'reduceOnly': 'true',
-    })
-    orden_tp = _request('POST', '/fapi/v1/order', {
-        'symbol': symbol, 'side': cierre, 'type': 'TAKE_PROFIT_MARKET',
-        'stopPrice': tp_r, 'quantity': cantidad, 'reduceOnly': 'true',
-    })
+    # En HEDGE las órdenes de cierre NO llevan reduceOnly: manda el positionSide
+    comun = {'symbol': symbol, 'side': cierre, 'positionSide': ps, 'quantity': cantidad}
+    orden_sl = _request('POST', '/fapi/v1/order',
+                        {**comun, 'type': 'STOP_MARKET', 'stopPrice': sl_r})
+    orden_tp = _request('POST', '/fapi/v1/order',
+                        {**comun, 'type': 'TAKE_PROFIT_MARKET', 'stopPrice': tp_r})
     return {'cantidad': cantidad,
-            'order_id_entrada': orden_entrada.get('orderId'),
+            'position_side': ps,
+            'entrada_real': entrada_real,
+            'inicio_ms': inicio_ms,
             'order_id_sl': orden_sl.get('orderId'),
-            'order_id_tp': orden_tp.get('orderId')}
+            'ordenes': [i for i in (id_entrada, orden_sl.get('orderId'),
+                                    orden_tp.get('orderId')) if i is not None]}
 
 
-def mover_stop(symbol, lado, cantidad, order_id_viejo, nuevo_stop):
+def mover_stop(symbol, lado, cantidad, order_id_viejo, nuevo_stop, position_side):
     """Cancela el SL viejo y coloca uno nuevo (ej. a breakeven tras el parcial)."""
     info = info_simbolo(symbol)
     stop_r = _redondear(nuevo_stop, info['price_step'], info['price_precision'])
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
     if order_id_viejo is not None:
-        try:
-            _request('DELETE', '/fapi/v1/order', {'symbol': symbol, 'orderId': order_id_viejo})
-        except ErrorEjecucion:
-            log.warning("no se pudo cancelar SL viejo %s (%s): puede que ya haya llenado",
-                       order_id_viejo, symbol)
+        cancelar_ordenes(symbol, [order_id_viejo])
     orden = _request('POST', '/fapi/v1/order', {
-        'symbol': symbol, 'side': cierre, 'type': 'STOP_MARKET',
-        'stopPrice': stop_r, 'quantity': cantidad, 'reduceOnly': 'true',
+        'symbol': symbol, 'side': cierre, 'positionSide': position_side,
+        'type': 'STOP_MARKET', 'stopPrice': stop_r, 'quantity': cantidad,
     })
     return orden.get('orderId')
 
 
-def cerrar_parcial(symbol, lado, cantidad_parcial):
-    """Cierra la mitad de la posición a mercado (Secc 20: parcial obligatorio)."""
+def cerrar_parcial(symbol, lado, cantidad_parcial, position_side):
+    """Cierra media posición a mercado (Secc 20: parcial obligatorio)."""
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
     info = info_simbolo(symbol)
     cantidad_parcial = _redondear(cantidad_parcial, info['qty_step'], info['qty_precision'])
     if cantidad_parcial <= 0:
         return None
     orden = _request('POST', '/fapi/v1/order', {
-        'symbol': symbol, 'side': cierre, 'type': 'MARKET',
-        'quantity': cantidad_parcial, 'reduceOnly': 'true',
+        'symbol': symbol, 'side': cierre, 'positionSide': position_side,
+        'type': 'MARKET', 'quantity': cantidad_parcial,
     })
     return orden.get('orderId')
 
 
-def cancelar_todas(symbol):
-    """Cancela cualquier orden abierta del símbolo (limpieza al cerrar del todo)."""
-    try:
-        _request('DELETE', '/fapi/v1/allOpenOrders', {'symbol': symbol})
-    except ErrorEjecucion:
-        log.warning("no se pudieron cancelar las órdenes abiertas de %s", symbol)
+def cerrar_a_mercado(symbol, lado, cantidad, position_side):
+    """Cierra lo que quede de la posición a mercado (cuando la gestión da la
+    operación por terminada pero el SL/TP del exchange no ha saltado)."""
+    return cerrar_parcial(symbol, lado, cantidad, position_side)
+
+
+def cancelar_ordenes(symbol, order_ids):
+    """Cancela SOLO las órdenes indicadas. NUNCA `allOpenOrders`: eso borraba los
+    SL/TP de las demás operaciones vivas del mismo símbolo (auditoría 14 jul)."""
+    for oid in order_ids or []:
+        try:
+            _request('DELETE', '/fapi/v1/order', {'symbol': symbol, 'orderId': oid})
+        except ErrorEjecucion:
+            # Lo normal: ya se llenó o ya no existe. No es un fallo.
+            log.debug("testnet: la orden %s de %s ya no estaba abierta", oid, symbol)
+
+
+def pnl_realizado(symbol, order_ids, desde_ms):
+    """P&L REAL de esta operación según el exchange: suma de realizedPnl menos
+    comisiones de los trades de SUS órdenes. Aquí es donde aparecen el
+    deslizamiento y las comisiones que la R teórica no ve."""
+    trades = _request('GET', '/fapi/v1/userTrades',
+                      {'symbol': symbol, 'startTime': int(desde_ms), 'limit': 1000})
+    ids = {str(i) for i in (order_ids or [])}
+    pnl = comision = 0.0
+    for t in trades:
+        if str(t.get('orderId')) not in ids:
+            continue
+        pnl += float(t.get('realizedPnl', 0) or 0)
+        comision += float(t.get('commission', 0) or 0)
+    return {'pnl': pnl - comision, 'bruto': pnl, 'comision': comision}

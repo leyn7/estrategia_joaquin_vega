@@ -97,11 +97,33 @@ def _aviso_limite_diario(sym, ops):
     return None
 
 
-def _testnet_abrir(sym, k, op, cuenta, chat_id):
+def _testnet_ocupado(ops, k_nueva, sym, lado):
+    """¿Hay ya una operación de ESTE lado abierta en el testnet? Binance tiene una
+    posición por lado (LONG/SHORT), no una por señal: dos compras a la vez se
+    fundirían en una sola posición y sus SL/TP se pisarían. La segunda señal se
+    registra igual (es un hecho) pero no va al exchange."""
+    for k, op in ops.items():
+        if k == k_nueva:
+            continue
+        if (op.get('testnet') and op.get('lado') == lado
+                and op.get('fase') not in FASES_CERRADAS):
+            return k
+    return None
+
+
+def _testnet_abrir(sym, k, op, ops, cuenta, chat_id):
     """Coloca en el testnet la entrada+SL+TP reales que espejan este gatillo
     (regla usuario 14 jul). Nunca tumba el registro del HECHO si falla —
     solo avisa: la operación teórica sigue existiendo aunque el testnet falle."""
     import mdt_ejecutor
+    ocupada = _testnet_ocupado(ops, k, sym, op['lado'])
+    if ocupada:
+        mdt_telegram.enviar(chat_id,
+            f"🧪⏸ {sym} | TESTNET: NO se abre {k}\n"
+            f"  ya hay una posición {op['lado']} viva en el exchange ({ocupada}).\n"
+            f"  Binance tiene UNA posición por lado: dos a la vez se fundirían y sus "
+            f"stops se pisarían. La señal queda registrada, sin orden real.")
+        return
     tp = max(op['tp_zona']) if op['lado'] == 'SELL' else min(op['tp_zona'])
     try:
         r = mdt_ejecutor.abrir_posicion(sym, op['lado'], op['entrada'], op['sl'],
@@ -111,10 +133,13 @@ def _testnet_abrir(sym, k, op, cuenta, chat_id):
         mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: no se pudo abrir {k}\n{e}")
         return
     op['testnet'] = r
+    real = r.get('entrada_real')
+    desliz = (f"\n  llenó en {real:.4f} (deslizamiento {real - op['entrada']:+.4f})"
+              if real else "")
     mdt_telegram.enviar(chat_id,
         f"🧪📌 {sym} | TESTNET: orden real colocada ({op['patron']})\n"
         f"  {op['lado']} qty={r['cantidad']} @ {op['entrada']:.4f} | "
-        f"SL {op['sl']:.4f} | TP {tp:.4f}\n"
+        f"SL {op['sl']:.4f} | TP {tp:.4f}{desliz}\n"
         f"  balance virtual: ${cuenta['balance']:.2f}")
 
 
@@ -126,9 +151,14 @@ def _testnet_parcial(sym, k, op, s, chat_id):
     if t is None:
         return
     try:
-        mdt_ejecutor.cerrar_parcial(sym, op['lado'], t['cantidad'] / 2.0)
+        media = t['cantidad'] / 2.0
+        orden = mdt_ejecutor.cerrar_parcial(sym, op['lado'], media, t['position_side'])
+        if orden:
+            t.setdefault('ordenes', []).append(orden)
         t['order_id_sl'] = mdt_ejecutor.mover_stop(
-            sym, op['lado'], t['cantidad'] / 2.0, t.get('order_id_sl'), op['entrada'])
+            sym, op['lado'], media, t.get('order_id_sl'), op['entrada'], t['position_side'])
+        t['ordenes'] = [o for o in t.get('ordenes', []) if o] + [t['order_id_sl']]
+        t['cantidad_viva'] = media
     except mdt_ejecutor.ErrorEjecucion as e:
         log.exception("testnet: fallo en parcial de %s", k)
         mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: fallo en parcial de {k}\n{e}")
@@ -138,26 +168,50 @@ def _testnet_parcial(sym, k, op, s, chat_id):
 
 
 def _testnet_cerrar(sym, k, op, s, cuenta, chat_id):
-    """Cierre final (SL/BE/TP): cancela lo que quede abierto en el testnet y
-    liquida el resultado contra el balance virtual (compone, Secc 1)."""
+    """Cierre final (SL/BE/TP): deja la posición plana, cancela SOLO las órdenes
+    de ESTA operación, y liquida el balance con el P&L REAL del exchange.
+
+    Dos correcciones de la auditoría (14 jul):
+      - Antes cancelaba TODAS las órdenes del símbolo: se llevaba por delante los
+        SL/TP de las otras operaciones vivas, dejándolas a pelo.
+      - Antes liquidaba con la R teórica (balance × riesgo% × R). Ahora suma los
+        realizedPnl menos comisiones de SUS trades: ahí sí se ven el deslizamiento
+        y las comisiones, que es justo lo que el testnet debe enseñar.
+    """
     import mdt_ejecutor
     t = op.get('testnet')
-    if t is not None:
-        try:
-            mdt_ejecutor.cancelar_todas(sym)
-        except Exception:  # noqa: BLE001 — la cuenta virtual igual se liquida
-            log.exception("testnet: fallo cancelando órdenes al cerrar %s", k)
+    if t is None:            # señal que no llegó al exchange (posición ocupada)
+        return
+    real = None
+    try:
+        # La gestión da la operación por cerrada según las velas; si el SL/TP del
+        # exchange no ha saltado aún, se cierra a mercado para no dejar cola.
+        viva = t.get('cantidad_viva', t['cantidad'])
+        if s['fase'] in ('BE',) or s['fase'] not in ('SL', 'TP'):
+            mdt_ejecutor.cerrar_a_mercado(sym, op['lado'], viva, t['position_side'])
+        mdt_ejecutor.cancelar_ordenes(sym, t.get('ordenes'))
+        real = mdt_ejecutor.pnl_realizado(sym, t.get('ordenes'), t['inicio_ms'])
+    except Exception:  # noqa: BLE001 — la cuenta igual se liquida (con la teórica)
+        log.exception("testnet: fallo cerrando %s", k)
+
     antes = cuenta['balance']
-    pnl = antes * RIESGO_CUENTA_PCT * s['r']
+    if real is not None:
+        pnl = real['pnl']
+        detalle = (f"  real: {real['bruto']:+.2f} bruto − {real['comision']:.2f} "
+                   f"comisión = {pnl:+.2f} USD")
+    else:
+        pnl = antes * RIESGO_CUENTA_PCT * s['r']    # respaldo si el exchange no responde
+        detalle = f"  (sin datos del exchange: estimado teórico {pnl:+.2f} USD)"
     cuenta['balance'] = antes + pnl
     cuenta.setdefault('historial', []).append({
         'op': k, 'patron': op['patron'], 'fase': s['fase'], 'r': round(s['r'], 3),
         'pnl': round(pnl, 2), 'balance': round(cuenta['balance'], 2),
-        'hora': op['hora_gatillo'],
+        'hora': op['hora_gatillo'], 'real': real is not None,
     })
     mdt_telegram.enviar(chat_id,
-        f"🧪 {sym} | TESTNET: {k} cerrada por {s['fase']} ({s['r']:+.2f}R)\n"
-        f"  {pnl:+.2f} USD -> balance virtual ${cuenta['balance']:.2f} "
+        f"🧪 {sym} | TESTNET: {k} cerrada por {s['fase']} ({s['r']:+.2f}R teórica)\n"
+        f"{detalle}\n"
+        f"  balance virtual ${cuenta['balance']:.2f} "
         f"(arrancó en ${BALANCE_VIRTUAL_INICIAL:.2f})")
 
 
@@ -189,7 +243,7 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
             if aviso:
                 eventos.append(aviso)
             if testnet:
-                _testnet_abrir(sym, k, ops[k], cuenta, chat_id)
+                _testnet_abrir(sym, k, ops[k], ops, cuenta, chat_id)
 
     # 2) Seguir cada operación no cerrada
     for k, op in list(ops.items()):
