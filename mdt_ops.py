@@ -97,33 +97,30 @@ def _aviso_limite_diario(sym, ops):
     return None
 
 
-def _testnet_ocupado(ops, k_nueva, sym, lado):
-    """¿Hay ya una operación de ESTE lado abierta en el testnet? Binance tiene una
-    posición por lado (LONG/SHORT), no una por señal: dos compras a la vez se
-    fundirían en una sola posición y sus SL/TP se pisarían. La segunda señal se
-    registra igual (es un hecho) pero no va al exchange."""
-    for k, op in ops.items():
-        if k == k_nueva:
-            continue
-        if (op.get('testnet') and op.get('lado') == lado
-                and op.get('fase') not in FASES_CERRADAS):
-            return k
-    return None
+def _vivas_del_lado(ops, k_nueva, lado):
+    """Operaciones de ese lado ya colocadas en el exchange y sin cerrar."""
+    return [k for k, op in ops.items()
+            if k != k_nueva and op.get('testnet') and op.get('lado') == lado
+            and op.get('fase') not in FASES_CERRADAS]
 
 
 def _testnet_abrir(sym, k, op, ops, cuenta, chat_id):
     """Coloca en el testnet la entrada+SL+TP reales que espejan este gatillo
     (regla usuario 14 jul). Nunca tumba el registro del HECHO si falla —
-    solo avisa: la operación teórica sigue existiendo aunque el testnet falle."""
+    solo avisa: la operación teórica sigue existiendo aunque el testnet falle.
+
+    TODAS las señales van al exchange (decisión del usuario, 14 jul: "déjalo como
+    está, a ver si se desploma la cuenta — ¿y si las que dejamos fuera son justo
+    las que cierran en positivo?"). El bot opera cada señal por separado y así se
+    prueba tal cual es.
+
+    Binance funde las del MISMO lado en una sola posición (entrada promediada,
+    margen y liquidación compartidos), pero cada señal conserva SU cantidad, SU
+    stop y SU take profit, y el P&L se atribuye por orderId — así que la cuenta de
+    cada operación sigue siendo exacta. Lo que se comparte es el riesgo de
+    liquidación: si el mercado va en contra, caen juntas."""
     import mdt_ejecutor
-    ocupada = _testnet_ocupado(ops, k, sym, op['lado'])
-    if ocupada:
-        mdt_telegram.enviar(chat_id,
-            f"🧪⏸ {sym} | TESTNET: NO se abre {k}\n"
-            f"  ya hay una posición {op['lado']} viva en el exchange ({ocupada}).\n"
-            f"  Binance tiene UNA posición por lado: dos a la vez se fundirían y sus "
-            f"stops se pisarían. La señal queda registrada, sin orden real.")
-        return
+    hermanas = _vivas_del_lado(ops, k, op['lado'])
     tp = max(op['tp_zona']) if op['lado'] == 'SELL' else min(op['tp_zona'])
     try:
         r = mdt_ejecutor.abrir_posicion(sym, op['lado'], op['entrada'], op['sl'],
@@ -136,11 +133,17 @@ def _testnet_abrir(sym, k, op, ops, cuenta, chat_id):
     real = r.get('entrada_real')
     desliz = (f"\n  llenó en {real:.4f} (deslizamiento {real - op['entrada']:+.4f})"
               if real else "")
+    # El nocional dice la verdad de la exposición: con stops finos, una operación
+    # de $10 de riesgo puede ser una posición de miles de dólares.
+    nocional = r['cantidad'] * (real or op['entrada'])
+    apilada = (f"\n  ⚠ ya hay {len(hermanas)} {op['lado']} viva(s): Binance las funde en "
+               f"UNA posición (margen y liquidación compartidos)" if hermanas else "")
     mdt_telegram.enviar(chat_id,
         f"🧪📌 {sym} | TESTNET: orden real colocada ({op['patron']})\n"
         f"  {op['lado']} qty={r['cantidad']} @ {op['entrada']:.4f} | "
         f"SL {op['sl']:.4f} | TP {tp:.4f}{desliz}\n"
-        f"  balance virtual: ${cuenta['balance']:.2f}")
+        f"  nocional ${nocional:,.0f} | riesgo ${cuenta['balance'] * RIESGO_CUENTA_PCT:.2f} "
+        f"({RIESGO_CUENTA_PCT:.0%} de ${cuenta['balance']:.2f}){apilada}")
 
 
 def _testnet_parcial(sym, k, op, s, chat_id):
