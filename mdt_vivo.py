@@ -37,14 +37,16 @@ from mdt_eventos import detectar_eventos, vigilar_anclas, vigilar_rsi3m
 
 
 def escanear_simbolos(estado, tolerar_fallos=True):
-    """Escanea la watchlist y envía los eventos nuevos de cada símbolo."""
+    """Escanea la watchlist y actualiza su estado interno (operaciones reales,
+    dedup de patrones/duelos...) — NO se notifica por Telegram (regla usuario 14
+    jul: "el análisis general que siga por dentro, solo quiero los avisos de mis
+    anclas"). Lo tracked queda disponible igual con el comando `operaciones`."""
     for sym in list(estado['watchlist']):
         mem = estado['simbolos'].setdefault(sym, {})
         try:
             resultado = escanear_completo(verbose=False, symbol=sym)
             for ev in detectar_eventos(sym, resultado, mem):
                 log.info("evento %s: %s", sym, ev.splitlines()[0])
-                mdt_telegram.enviar(estado.get('chat_id'), ev)
         except Exception:  # noqa: BLE001 — el bucle jamás muere por un símbolo
             if not tolerar_fallos:
                 raise

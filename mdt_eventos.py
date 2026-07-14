@@ -216,9 +216,13 @@ def vigilar_rsi3m(estado):
 
 
 def vigilar_anclas(estado):
-    """Anclas marcadas por el OPERADOR (regla usuario 13 jul): re-mapea cada
-    tramo en cada escaneo — el extremo se mueve con el precio — y avisa cuando el
-    precio ENTRA en una de sus zonas operativas. Un aviso por entrada."""
+    """Anclas marcadas por el OPERADOR (regla usuario 13 jul, ampliada 14 jul: el
+    análisis general ya no notifica por Telegram — SOLO importan los sucesos de
+    SUS anclas). Re-mapea cada tramo en cada escaneo y avisa de lo importante:
+      1. CICLO ACTIVADO (tocó su 38.2): sus zonas quedan operativas.
+      2. PRECIO EN ZONA: entró a una zona operativa suya.
+      3. TRABAJANDO LA ZONA: el patrón avanza dentro (mismo filtro NOTIF_PATRON
+         que el bot automático — por defecto solo lo que ya trae operación)."""
     from mdt_macro_mapper import analizar_ancla
     eventos = []
     for clave, v in list((estado.get('anclas') or {}).items()):
@@ -230,6 +234,27 @@ def vigilar_anclas(estado):
         if a is None:
             continue
         precio = a['precio']
+
+        # 1) Ciclo activado (tocó su 38.2): nacen sus zonas de trabajo
+        ciclos_vistos = v.setdefault('ciclos_vistos', {})
+        ciclos_activos = set()
+        for c in a['ciclos']:
+            ev = c.get('eval') or {}
+            if ev.get('estado') != 'VIVO':
+                continue
+            kc = f"{c['direction']}|{c['ancla']:.2f}"
+            ciclos_activos.add(kc)
+            activado = bool(ev.get('activado'))
+            if activado and not ciclos_vistos.get(kc):
+                eventos.append(
+                    f"⚓🔔 {v['symbol']} | CICLO ACTIVADO (tocó su 38.2): {c['nombre']} "
+                    f"({c['tf']}, ancla {c['ancla']:.2f}) {hora_cot(ev.get('hora_activacion'))}\n"
+                    f"  tramo: {a['ancla']:.2f} → {a['extremo']:.2f} — sus zonas quedan operativas.")
+            ciclos_vistos[kc] = activado
+        for kc in list(ciclos_vistos):
+            if kc not in ciclos_activos:
+                ciclos_vistos.pop(kc)
+
         vistas = v.setdefault('zonas_vistas', {})
         activas = set()
         # El escaneo de las zonas del ancla: dice si el patrón se puede LEER ahí
@@ -240,6 +265,8 @@ def vigilar_anclas(estado):
         except Exception:  # noqa: BLE001 — el aviso de zona no depende de esto
             log.exception("escaneo del ancla %s", clave)
             escaneos = {}
+
+        # 2) Precio entró a una zona operativa
         for lado, z in a['zonas']:
             if not z.get('z') or z.get('ancla') is None:
                 continue
@@ -262,4 +289,24 @@ def vigilar_anclas(estado):
         for k in list(vistas):          # zonas que ya no existen en el tramo
             if k not in activas:
                 vistas.pop(k)
+
+        # 3) Trabajando la zona: el patrón avanza (Entrada Profunda / Engaño
+        # Extremo...), con el mismo filtro NOTIF_PATRON del bot automático.
+        patron_vistos = v.setdefault('patron_vistos', {})
+        patrones_activos = set()
+        for e in escaneos.values():
+            if e['contexto'] or e.get('ancla') is None:
+                continue
+            estado_p = e['resultado']['estado']
+            kp = f"{e['lado']}|{e['zona']}|{e['ancla']:.2f}"
+            patrones_activos.add(kp)
+            if _interesa_patron(e, estado_p) and estado_p != patron_vistos.get(kp):
+                if estado_p in ESTADOS_HITO:
+                    eventos.append(f"⚓💀 {v['symbol']} | HITO EN SU ZONA: {texto_escaneo(e)}")
+                else:
+                    eventos.append(f"⚓🎯 {v['symbol']} | TRABAJANDO SU ZONA: {texto_escaneo(e)}")
+            patron_vistos[kp] = estado_p
+        for kp in list(patron_vistos):
+            if kp not in patrones_activos:
+                patron_vistos.pop(kp)
     return eventos

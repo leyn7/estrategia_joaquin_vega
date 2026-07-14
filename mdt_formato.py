@@ -4,7 +4,7 @@
 Solo presentación: aquí no hay lógica de estrategia ni decisiones — se limita a
 convertir los resultados del escáner en texto legible para el operador.
 """
-from mdt_config import RATIO_MINIMO
+from mdt_config import MIN_RIESGO_PCT, RATIO_MINIMO
 from mdt_data import to_cot
 from mdt_operacion import ESTADOS_OPERABLES
 
@@ -173,6 +173,10 @@ def texto_zonas_ancla(escaneos, precio):
             L.append(f"      ⚡ llegada BARRIDO: tocó y salió (mecha {d.get('mecha_vs_cuerpo')}x)")
         elif lleg == "LENTA":
             L.append(f"      🐌 llegada lenta: {d.get('cierres_dentro')} cierres dentro")
+        if d.get('margen_ee_ok') is False:
+            L.append(f"      ⚠ NO vale la pena vigilar este Engaño Extremo: ni en el mejor "
+                      f"caso (25%) da margen rentable — mínimo {d['riesgo_min_ee']:.2f} "
+                      f"({d['margen_min_ee_pct']:.2%}) < {MIN_RIESGO_PCT:.2%}, comisiones se lo comen.")
         op = e.get('operacion')
         if op:
             L.append(texto_operacion(op).lstrip('\n'))

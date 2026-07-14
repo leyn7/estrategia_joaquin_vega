@@ -58,6 +58,12 @@ PARCIAL_R = 2.0      # Punto de descarga de presión (parcial mínimo 1:2, Secc 
 FINAL_R = 4.0        # Objetivo final = doble del parcial (perfil estándar 1:2 -> 1:4)
 MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bucle en vivo)
 
+# SL más cerca que esto (% de la entrada): las comisiones (entrada+salida a
+# mercado, ~0.05% c/u) se comen el riesgo antes de que el trade respire. Antes
+# solo lo aplicaba rsi3m.py (descartaba en silencio); ahora también lo usa
+# construir_operacion (Secc 7) para AVISAR, no ocultar, la señal 14 jul.
+MIN_RIESGO_PCT = 0.0035
+
 # --- Preferencia operativa (usuario, 4 jul 2026) ---
 # "Yo no trabajaría una zona macro, tardaría mucho en darme profit; prefiero
 # trabajar las zonas pequeñas que me den oportunidades de entrada y sean

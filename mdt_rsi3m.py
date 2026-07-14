@@ -33,14 +33,14 @@ INTERRUPTORES (la diferencia entre el bot automático y el modo bajo demanda):
 import numpy as np
 import pandas as pd
 
-from mdt_config import SYMBOL
+from mdt_config import SYMBOL, MIN_RIESGO_PCT
 from mdt_feed import descargar
 
 RSI_PERIOD = 14
 MID, OB, OS = 50, 70, 30
 RR = 10                    # TP = RR * riesgo (config validada)
 FEE_ENTRY = FEE_EXIT = 0.0005    # taker 0.05% (entrada y salida a mercado)
-MIN_RISK_PCT = 0.0035      # SL más cerca que esto: las comisiones se lo comen
+MIN_RISK_PCT = MIN_RIESGO_PCT    # SL más cerca que esto: las comisiones se lo comen
 EMA_FAST, EMA_SLOW = 50, 200
 H1_VENTA_BANDA = (50, 70)
 H1_COMPRA_BANDA = (30, 50)

@@ -6,7 +6,7 @@ objetivo (la zona contraria) y ratio. La extracción de entrada/SL vive en
 mdt_gestion (única fuente de verdad, la misma que usan el registro de
 operaciones reales y el backtest); aquí se le añade el objetivo y el veredicto.
 """
-from mdt_config import RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
+from mdt_config import MIN_RIESGO_PCT, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
 from mdt_gestion import entrada_de_resultado
 
 # Estados que representan un setup accionable o vivo (para resaltar en el reporte)
@@ -79,13 +79,25 @@ def construir_operacion(escaneo, prioritaria):
     # seguro: cada oportunidad que se opere tendrá sus propios TP"). La
     # dirección global (zona más angosta no-contexto con el precio dentro) ya
     # no degrada la señal a Secundaria; si hay trabajo vivo en contra, se avisa.
-    aviso = None
+    avisos = []
     if prioritaria is not None and lado != prioritaria:
-        aviso = ("hay trabajo vivo en contra: el precio está dentro de una zona de "
-                 + ("VENTAS" if prioritaria == "SELL" else "COMPRAS"))
+        avisos.append("hay trabajo vivo en contra: el precio está dentro de una zona de "
+                       + ("VENTAS" if prioritaria == "SELL" else "COMPRAS"))
+    # SL pegado a la entrada (Secc 7 + regla usuario 14 jul): un ratio alto no
+    # sirve de nada si el riesgo es tan chico que las comisiones (~0.1% ida y
+    # vuelta) se lo comen antes de que el trade respire. Se avisa, no se oculta.
+    riesgo_pct = riesgo / entrada
+    cumple_riesgo_minimo = riesgo_pct >= MIN_RIESGO_PCT
+    if not cumple_riesgo_minimo:
+        riesgo_min = entrada * MIN_RIESGO_PCT
+        avisos.append(f"SL demasiado ajustado ({riesgo_pct:.2%} de riesgo, {riesgo:.2f} en "
+                       f"precio): las comisiones se lo comen — necesita al menos "
+                       f"{MIN_RIESGO_PCT:.2%} ({riesgo_min:.2f})")
     return {"entrada": entrada, "stop_loss": sl,
             "tp_zona": (max(tp_zona), min(tp_zona)), "tp_nivel": tp,
             "riesgo": riesgo, "recompensa": recompensa, "ratio": ratio,
             "cumple_ratio": ratio >= RATIO_MINIMO,
-            "movimiento": "PRIORITARIO (su zona en trabajo)", "aviso": aviso,
+            "riesgo_pct": riesgo_pct, "cumple_riesgo_minimo": cumple_riesgo_minimo,
+            "movimiento": "PRIORITARIO (su zona en trabajo)",
+            "aviso": " | ".join(avisos) or None,
             "volumen": "Normal"}

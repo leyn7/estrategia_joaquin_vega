@@ -10,7 +10,7 @@ Los dos nacen cuando el precio NO respeta la zona con un giro normal:
 
 Todo en espacio canónico (semántica SELL); ver mdt_canonico.py.
 """
-from mdt_config import NIVEL_618, NIVEL_809, ENGANO_1618
+from mdt_config import MIN_RIESGO_PCT, NIVEL_618, NIVEL_809, ENGANO_1618
 
 
 def entrada_profunda(df, HI, LO, zmax, anulacion, r, palabras, p1_idx, p1_val, detalles):
@@ -113,6 +113,15 @@ def engano_extremo(df, HI, LO, r, palabras, idx_escape, extremo_inicial,
     """
     detalles["calidad"] = "ENGAÑO EXTREMO (Secc 17)"
     span = anulacion - zmax
+    # Regla del 25% + comisiones (14 jul): la entrada es SIEMPRE zmax (fijo) y el
+    # SL nunca puede quedar más cerca que el 25% de la indecisión (o el patrón se
+    # descarta, EE_DESCARTADO_25) — así que el riesgo MÍNIMO posible ya se conoce
+    # con solo zmax/anulación del ciclo, antes de que exista ningún pico real.
+    riesgo_min_ee = span * 0.25
+    margen_min_ee_pct = (riesgo_min_ee / zmax) if zmax else 0.0
+    detalles["riesgo_min_ee"] = r(riesgo_min_ee)
+    detalles["margen_min_ee_pct"] = margen_min_ee_pct
+    detalles["margen_ee_ok"] = margen_min_ee_pct >= MIN_RIESGO_PCT
     ext = extremo_inicial
     for i in range(idx_escape, len(df)):
         if HI[i] > ext:
@@ -155,10 +164,13 @@ def engano_extremo(df, HI, LO, r, palabras, idx_escape, extremo_inicial,
                 "mensaje": f"Engaño Extremo ARMADO (se adentró {ext - zmax:.2f} >= 25% de la indecisión). "
                            f"{palabras['accion']} agresiva si el precio cruza de vuelta {r(zmax):.2f}. SL {r(ext):.2f}",
                 "detalles": detalles}
-    return {"estado": "EE_EN_INDECISION",
-            "mensaje": f"Precio en Zona de Indecisión (inoperable): necesita adentrarse hasta "
-                       f"{r(zmax + span * 0.25):.2f} (25%) para armar el Engaño Extremo.",
-            "detalles": detalles}
+    msg = (f"Precio en Zona de Indecisión (inoperable): necesita adentrarse hasta "
+           f"{r(zmax + span * 0.25):.2f} (25%) para armar el Engaño Extremo.")
+    if not detalles["margen_ee_ok"]:
+        msg += (f" ⚠ Ni vale la pena seguir vigilando: ese mínimo del 25% da un riesgo "
+                f"de {riesgo_min_ee:.2f} ({margen_min_ee_pct:.2%}) < {MIN_RIESGO_PCT:.2%} — "
+                f"las comisiones se lo comen aunque llegue a armarse.")
+    return {"estado": "EE_EN_INDECISION", "mensaje": msg, "detalles": detalles}
 
 
 def vigilar_escape(df, HI, LO, zmax, anulacion, r, palabras, desde, etiqueta, historial):
