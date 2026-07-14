@@ -129,7 +129,16 @@ def texto_zonas_ancla(escaneos, precio):
             d = (zmin - precio) if precio < zmin else (precio - zmax)
             donde = f"(a {d:.2f} | {d / precio:.1%})"
         ctx = " [zona macro: contexto]" if e['contexto'] else ""
-        L.append(f"\n[{accion}] {e['zona']} {zmax:.2f}-{zmin:.2f} {donde}{ctx}")
+        # La banda (Alta/Media/Baja) y, sobre todo, EL ANCLA DE SU CICLO — el
+        # punto de control que crea la zona (regla usuario 13 jul: "necesito las
+        # anclas de los ciclos, no la principal repetida en todas").
+        banda = e['zona'].rsplit('(', 1)[-1].rstrip(')') if '(' in e['zona'] else e['zona']
+        L.append(f"\n[{accion}] {banda} {zmax:.2f}-{zmin:.2f} {donde}{ctx}")
+        if e.get('ancla') is not None:
+            ciclo = ""
+            if e.get('ciclo_origen') is not None and e.get('ciclo_fin') is not None:
+                ciclo = f": {e['ciclo_origen']:.2f} → {e['ciclo_fin']:.2f}"
+            L.append(f"   ⚓ ancla del ciclo: {e['ancla']:.2f} ({e['tf_ciclo']}){ciclo}")
 
         previos = [h for h in (res.get('historial') or []) if h is not res]
         if previos:

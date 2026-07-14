@@ -63,7 +63,7 @@ def reporte_ancla(a):
             continue
         zs = por_ancla.get(round(c['ancla'], 2), [])
         if not zs:
-            omitidos.append(f"{c['ancla']:.2f}")
+            omitidos.append(f"{c['ancla']:.2f} ({_motivo_omision(c)})")
             continue
         hay = True
         grado = f"grado {c['grado']:.2f}" if c['grado'] is not None else "macro del tramo"
