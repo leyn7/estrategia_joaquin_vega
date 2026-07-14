@@ -4,6 +4,7 @@
 Los NÚMEROS DE LA BIBLIA (fibo) también viven aquí con nombre: no son ajustables
 (son la estrategia), pero nombrarlos una sola vez evita typos al usarlos.
 """
+import os
 
 # --- Mercado ---
 SYMBOL = "BNBUSDT"           # símbolo por defecto; todo el pipeline acepta --symbol
@@ -32,6 +33,16 @@ MAX_VELAS_DESCARGA = 15000   # presupuesto de velas por descarga (1m -> ~10 día
 # ancla. Regla del usuario (4 jul): la escala del patrón y la del ciclo van
 # juntas — el stop de una oportunidad macro es de tamaño macro.
 TF_PATRON = {"1d": "4h", "2h": "1h", "30m": "15m", "3m": "1m", "1m": "1m"}
+
+# Lupa máxima del patrón. El BOT AUTOMÁTICO respeta la escalera de la Secc 10
+# (None): meterle la lupa fina le daba stops de lotería — una zona macro con el
+# objetivo a 50 puntos operada con un SL de 0.77 (R:B 1:67), que cualquier mecha
+# de ruido salta. Su propia regla del 4 jul lo dice: el stop de una oportunidad
+# macro es de tamaño macro.
+# La lupa fina (3m) es SOLO para lo que el operador pide a mano — sus anclas —,
+# donde él elige el contexto y opera intradía: ahí "en 15m se pierden muchos
+# detalles internos" (regla usuario 13 jul). Ver TF_ANCLA_FINA en mdt_escaner.
+TF_PATRON_MAX = os.environ.get("MDT_TF_PATRON_MAX") or None
 
 # --- Capa operativa (regla usuario 3 jul 2026) ---
 # Ciclo OPERABLE = grado >= 1% del precio actual (el macro siempre es operable).

@@ -218,7 +218,10 @@ def analizar_ancla(precio_ancla, symbol=SYMBOL, cutoff=None, direction=None,
             'origen': res['origen'], 'extremo': res['extremo'],
             'ciclos': res['ciclos'], 'zonas': zonas, 'alerts': alerts,
             'reset_618': res.get('reset_618'), 'precio': precio,
-            'alternativas': alternativas, 'tf_busqueda': tf_busqueda}
+            'alternativas': alternativas, 'tf_busqueda': tf_busqueda,
+            # Lo que PIDIÓ, para poder avisarle si no existe tal punto y le
+            # sustituimos otro (pidió 587.07 y el gráfico solo tenía 585.07)
+            'pedido': float(precio_ancla)}
 
 
 def ancla_viva(mapa, ancla, tol=1e-6):

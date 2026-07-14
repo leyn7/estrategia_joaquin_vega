@@ -38,6 +38,13 @@ def reporte_ancla(a):
     L = [f"⚓ ANCLA {a['ancla']:.2f} ({sentido}) → extremo {a['extremo']:.2f}",
          f"   precio {precio:.2f} | ancla del {_hora(a['ancla_time'])}"
          f" (busqueda en {a.get('tf_busqueda', '30m')})"]
+    # Si su precio no existe en el gráfico, se le DICE (antes se le sustituía en
+    # silencio: pidió 587.07 y se le mapeó el 585.07 sin avisar)
+    pedido = a.get('pedido')
+    if pedido is not None and abs(pedido - a['ancla']) > precio * 0.001:
+        L.append(f"   ⚠ Tu {pedido:.2f} no existe en el gráfico ahí: lo más cercano es "
+                 f"{a['ancla']:.2f} (a {abs(pedido - a['ancla']):.2f}). Es lo que mapeé.")
+
     alt = a.get('alternativas') or []
     if alt:
         # Un precio suelto es ambiguo: se toma la coincidencia MÁS EXACTA (y entre

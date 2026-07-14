@@ -304,6 +304,15 @@ def procesar_comandos(estado, timeout=20):
             continue
         if chat != str(estado['chat_id']):
             continue  # solo el chat autorizado
-        respuesta = atender_comando(estado, texto)
+        # Cada comando al log: sin esto, un comando que se corta a medias (p.ej.
+        # un reinicio del servicio mientras mapea un ancla, que tarda 1-3 min) es
+        # invisible — el operador ve el "Mapeando..." y nunca la respuesta.
+        log.info("comando de %s: %r", chat, texto)
+        try:
+            respuesta = atender_comando(estado, texto)
+        except Exception as e:  # noqa: BLE001 — un comando roto no tumba el bucle
+            log.exception("comando %r", texto)
+            respuesta = f"Error atendiendo «{texto}»: {e}"
+        log.info("comando %r respondido (%d caracteres)", texto.split()[0], len(respuesta))
         mdt_telegram.enviar(estado['chat_id'], respuesta)
         guardar_estado(estado)

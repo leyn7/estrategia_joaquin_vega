@@ -14,7 +14,8 @@ Este archivo ORQUESTA el escaneo; lo que decide y lo que se imprime vive aparte:
   mdt_reporte_escaner.py  los textos por consola
 """
 import pandas as pd
-from mdt_config import SYMBOL, TF_PATRON, TF_MINUTOS, ZONA_MAX_OPERABLE_PCT
+from mdt_config import (SYMBOL, TF_PATRON, TF_MINUTOS, TF_PATRON_MAX,
+                        MAX_VELAS_DESCARGA, ZONA_MAX_OPERABLE_PCT)
 from mdt_data import to_cot
 from mdt_duelos import duelos_entre_tramos
 from mdt_macro_mapper import generar_mapa, reporte_tramos, _descargar, _ahora, ancla_viva
@@ -23,14 +24,15 @@ from mdt_operacion import (ESTADOS_OPERABLES, construir_operacion,  # noqa: F401
 from mdt_reporte_escaner import imprimir_escaneo_mapa, imprimir_escaneo_tramos
 from mdt_patrones import detect_patron_institucional
 
-VELAS_ESCANEO = 1500  # ventana máxima de velas de la TF del patrón
-# Lupa del ancla manual (regla usuario 13 jul): el patrón de las zonas de un ancla
-# suya se lee como mucho en 3m. El mapa automático conserva la escalera de la
-# biblia (Secc 10: una TF por debajo del ciclo); esto solo afecta a lo que él pide.
-TF_ANCLA_FINA = "3m"
+VELAS_ESCANEO = 1500  # ventana mínima de velas de la TF del patrón
+# La lupa del ancla MANUAL: el operador opera intradía sobre lo que él marca, y
+# ahí "en 15m se pierden muchos detalles internos" (regla usuario 13 jul). El bot
+# automático NO la usa: conserva la escalera de la biblia (TF_PATRON_MAX=None).
+TF_ANCLA_FINA = TF_PATRON_MAX or "3m"
 
 
-def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio, tf_fina=None):
+def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio,
+                   tf_fina=TF_PATRON_MAX):
     """Escanea la cadena de patrones de UNA zona (episodio operativo recortado).
 
     Secc 13 (checklist 1): el patrón solo vale dentro de una zona ACTIVA — la
@@ -43,12 +45,22 @@ def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio, tf_fina
     tf_patron = TF_PATRON.get(zona['tf'], zona['tf'])
     if tf_fina is not None and TF_MINUTOS[tf_fina] < TF_MINUTOS[tf_patron]:
         tf_patron = tf_fina
-    if tf_patron not in cache_df:
-        desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * TF_MINUTOS[tf_patron])
+
+    # La ventana debe cubrir TODO el episodio de la zona (desde su activación). En
+    # TFs finas eso importa: 1500 velas de 15m son 15 días, pero de 3m son solo 3 —
+    # sin estirarla, bajar la lupa haría VER MENOS historia, no más.
+    minutos = TF_MINUTOS[tf_patron]
+    desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * minutos)
+    desde_op = zona.get('operativa_desde')
+    if desde_op is not None:
+        necesario = pd.Timestamp(desde_op) - pd.Timedelta(minutes=10 * minutos)
+        tope = limite - pd.Timedelta(minutes=MAX_VELAS_DESCARGA * minutos)
+        desde = max(min(desde, necesario), tope)   # el presupuesto de velas manda
+    df = cache_df.get(tf_patron)
+    if df is None or (len(df) and to_cot(desde) < df['open_time'].iloc[0]):
         df = _descargar(tf_patron, desde, cutoff, symbol)
         df['open_time'] = to_cot(df['open_time'])
         cache_df[tf_patron] = df
-    df = cache_df[tf_patron]
     df_z = df
     desde_op = zona.get('operativa_desde')
     if desde_op is not None:
