@@ -206,33 +206,54 @@ def abrir_posicion(symbol, lado, entrada, sl, tp, balance_virtual):
     log.info("testnet %s: ENTRADA %s qty=%s -> orderId=%s llenó en %s (teórica %s)",
              symbol, lado, cantidad, id_entrada, entrada_real, entrada)
 
-    # En HEDGE las órdenes de cierre NO llevan reduceOnly: manda el positionSide
-    comun = {'symbol': symbol, 'side': cierre, 'positionSide': ps, 'quantity': cantidad}
-    orden_sl = _request('POST', '/fapi/v1/order',
-                        {**comun, 'type': 'STOP_MARKET', 'stopPrice': sl_r})
-    orden_tp = _request('POST', '/fapi/v1/order',
-                        {**comun, 'type': 'TAKE_PROFIT_MARKET', 'stopPrice': tp_r})
+    # SL y TP: órdenes CONDICIONALES -> Algo Order API (ver _algo_stop). El
+    # STOP_MARKET en /fapi/v1/order dejó de existir el 9-dic-2025 y sin esto la
+    # entrada quedaba SIN STOP (posición desnuda, el bug del 14 jul).
+    algo_sl = _algo_stop(symbol, cierre, ps, 'STOP_MARKET', sl_r, cantidad)
+    algo_tp = _algo_stop(symbol, cierre, ps, 'TAKE_PROFIT_MARKET', tp_r, cantidad)
     return {'cantidad': cantidad,
             'position_side': ps,
             'entrada_real': entrada_real,
             'inicio_ms': inicio_ms,
-            'order_id_sl': orden_sl.get('orderId'),
-            'ordenes': [i for i in (id_entrada, orden_sl.get('orderId'),
-                                    orden_tp.get('orderId')) if i is not None]}
+            'order_id_entrada': id_entrada,
+            'algo_sl': algo_sl, 'algo_tp': algo_tp,
+            'algos': [a for a in (algo_sl, algo_tp) if a is not None]}
 
 
-def mover_stop(symbol, lado, cantidad, order_id_viejo, nuevo_stop, position_side):
-    """Cancela el SL viejo y coloca uno nuevo (ej. a breakeven tras el parcial)."""
+def _algo_stop(symbol, side, position_side, tipo, trigger, cantidad):
+    """Coloca una orden condicional (STOP_MARKET / TAKE_PROFIT_MARKET) en la Algo
+    Order API. Devuelve el algoId. Desde el 9-dic-2025 Binance migró TODAS las
+    condicionales a este servicio: el endpoint clásico las rechaza (-4120)."""
+    o = _request('POST', '/fapi/v1/algoOrder', {
+        'symbol': symbol, 'side': side, 'positionSide': position_side,
+        'algoType': 'CONDITIONAL', 'type': tipo,
+        'triggerPrice': trigger, 'quantity': cantidad,
+    })
+    return o.get('algoId')
+
+
+class StopDispararia(ErrorEjecucion):
+    """El stop pedido se dispararía de inmediato: el precio ya cruzó el nivel."""
+
+
+def mover_stop(symbol, lado, cantidad, algo_viejo, nuevo_stop, position_side):
+    """Cancela el SL viejo (algo) y coloca uno nuevo (ej. a breakeven tras el
+    parcial). Devuelve el algoId nuevo.
+
+    Si el nuevo stop se dispararía ya (el precio volvió al nivel antes de poder
+    moverlo, -2021), se avisa con StopDispararia para que quien llama cierre a
+    mercado en vez de dejar la posición sin stop."""
     info = info_simbolo(symbol)
     stop_r = _redondear(nuevo_stop, info['price_step'], info['price_precision'])
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
-    if order_id_viejo is not None:
-        cancelar_ordenes(symbol, [order_id_viejo])
-    orden = _request('POST', '/fapi/v1/order', {
-        'symbol': symbol, 'side': cierre, 'positionSide': position_side,
-        'type': 'STOP_MARKET', 'stopPrice': stop_r, 'quantity': cantidad,
-    })
-    return orden.get('orderId')
+    if algo_viejo is not None:
+        cancelar_ordenes(symbol, [algo_viejo])
+    try:
+        return _algo_stop(symbol, cierre, position_side, 'STOP_MARKET', stop_r, cantidad)
+    except ErrorEjecucion as e:
+        if '-2021' in str(e):
+            raise StopDispararia(str(e)) from e
+        raise
 
 
 def cerrar_parcial(symbol, lado, cantidad_parcial, position_side):
@@ -255,28 +276,35 @@ def cerrar_a_mercado(symbol, lado, cantidad, position_side):
     return cerrar_parcial(symbol, lado, cantidad, position_side)
 
 
-def cancelar_ordenes(symbol, order_ids):
-    """Cancela SOLO las órdenes indicadas. NUNCA `allOpenOrders`: eso borraba los
-    SL/TP de las demás operaciones vivas del mismo símbolo (auditoría 14 jul)."""
-    for oid in order_ids or []:
+def cancelar_ordenes(symbol, algo_ids):
+    """Cancela SOLO las órdenes condicionales (SL/TP) indicadas, por su algoId.
+    NUNCA todas: eso borraba los SL/TP de las demás operaciones vivas del mismo
+    símbolo (auditoría 14 jul). La entrada ya está llenada, no se cancela."""
+    for aid in algo_ids or []:
         try:
-            _request('DELETE', '/fapi/v1/order', {'symbol': symbol, 'orderId': oid})
+            _request('DELETE', '/fapi/v1/algoOrder', {'symbol': symbol, 'algoId': aid})
         except ErrorEjecucion:
-            # Lo normal: ya se llenó o ya no existe. No es un fallo.
-            log.debug("testnet: la orden %s de %s ya no estaba abierta", oid, symbol)
+            # Lo normal: ya se disparó o ya no existe. No es un fallo.
+            log.debug("testnet: el algo %s de %s ya no estaba abierto", aid, symbol)
 
 
-def pnl_realizado(symbol, order_ids, desde_ms):
-    """P&L REAL de esta operación según el exchange: suma de realizedPnl menos
-    comisiones de los trades de SUS órdenes. Aquí es donde aparecen el
-    deslizamiento y las comisiones que la R teórica no ve."""
-    trades = _request('GET', '/fapi/v1/userTrades',
-                      {'symbol': symbol, 'startTime': int(desde_ms), 'limit': 1000})
-    ids = {str(i) for i in (order_ids or [])}
+def pnl_realizado(symbol, desde_ms, hasta_ms=None):
+    """P&L REAL según el exchange en la ventana [desde_ms, hasta_ms]: suma de
+    realizedPnl menos comisiones de los trades del símbolo.
+
+    OJO — atribución con posiciones apiladas: cuando un stop condicional se
+    dispara, Binance crea una orden nueva cuyo orderId NO conocíamos, así que ya
+    no se puede filtrar por 'nuestras' órdenes. Se suma por VENTANA TEMPORAL (de
+    la apertura al cierre de esta operación). Con varias del mismo lado abiertas a
+    la vez, el reparto es aproximado; la verdad de la CUENTA la da siempre el
+    balance real del testnet."""
+    params = {'symbol': symbol, 'startTime': int(desde_ms), 'limit': 1000}
+    if hasta_ms:
+        params['endTime'] = int(hasta_ms)
+    trades = _request('GET', '/fapi/v1/userTrades', params)
     pnl = comision = 0.0
     for t in trades:
-        if str(t.get('orderId')) not in ids:
-            continue
         pnl += float(t.get('realizedPnl', 0) or 0)
         comision += float(t.get('commission', 0) or 0)
-    return {'pnl': pnl - comision, 'bruto': pnl, 'comision': comision}
+    return {'pnl': pnl - comision, 'bruto': pnl, 'comision': comision,
+            'n_trades': len(trades)}

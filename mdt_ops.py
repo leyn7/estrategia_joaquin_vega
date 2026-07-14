@@ -153,15 +153,27 @@ def _testnet_parcial(sym, k, op, s, chat_id):
     t = op.get('testnet')
     if t is None:
         return
+    media = t['cantidad'] / 2.0
     try:
-        media = t['cantidad'] / 2.0
-        orden = mdt_ejecutor.cerrar_parcial(sym, op['lado'], media, t['position_side'])
-        if orden:
-            t.setdefault('ordenes', []).append(orden)
-        t['order_id_sl'] = mdt_ejecutor.mover_stop(
-            sym, op['lado'], media, t.get('order_id_sl'), op['entrada'], t['position_side'])
-        t['ordenes'] = [o for o in t.get('ordenes', []) if o] + [t['order_id_sl']]
+        # El TP viejo (por la cantidad entera) ya no vale: se cancela y el SL se
+        # re-coloca a breakeven por la mitad que queda viva.
+        mdt_ejecutor.cerrar_parcial(sym, op['lado'], media, t['position_side'])
+        mdt_ejecutor.cancelar_ordenes(sym, [a for a in (t.get('algo_sl'), t.get('algo_tp')) if a])
         t['cantidad_viva'] = media
+        t['algo_sl'] = mdt_ejecutor.mover_stop(
+            sym, op['lado'], media, None, op['entrada'], t['position_side'])
+        t['algo_tp'] = None
+        t['algos'] = [t['algo_sl']]
+    except mdt_ejecutor.StopDispararia:
+        # El precio ya volvió al breakeven antes de poder mover el stop: se cierra
+        # a mercado la mitad viva (el breakeven se alcanzó de hecho).
+        mdt_ejecutor.cerrar_a_mercado(sym, op['lado'], media, t['position_side'])
+        t['algo_sl'] = t['algo_tp'] = None
+        t['algos'] = []
+        t['cantidad_viva'] = 0.0
+        mdt_telegram.enviar(chat_id, f"🧪💰 {sym} | TESTNET: parcial hecho; el precio ya "
+                                     f"tocaba breakeven, cerré el resto a mercado.")
+        return
     except mdt_ejecutor.ErrorEjecucion as e:
         log.exception("testnet: fallo en parcial de %s", k)
         mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: fallo en parcial de {k}\n{e}")
@@ -192,8 +204,9 @@ def _testnet_cerrar(sym, k, op, s, cuenta, chat_id):
         viva = t.get('cantidad_viva', t['cantidad'])
         if s['fase'] in ('BE',) or s['fase'] not in ('SL', 'TP'):
             mdt_ejecutor.cerrar_a_mercado(sym, op['lado'], viva, t['position_side'])
-        mdt_ejecutor.cancelar_ordenes(sym, t.get('ordenes'))
-        real = mdt_ejecutor.pnl_realizado(sym, t.get('ordenes'), t['inicio_ms'])
+        mdt_ejecutor.cancelar_ordenes(sym, t.get('algos'))
+        import time as _t
+        real = mdt_ejecutor.pnl_realizado(sym, t['inicio_ms'], int(_t.time() * 1000))
     except Exception:  # noqa: BLE001 — la cuenta igual se liquida (con la teórica)
         log.exception("testnet: fallo cerrando %s", k)
 
