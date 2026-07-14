@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 
 import mdt_telegram
-from mdt_config import SYMBOL, TZ_LOCAL
+from mdt_config import BALANCE_VIRTUAL_INICIAL, MDT_MODO, RIESGO_CUENTA_PCT, SYMBOL, TZ_LOCAL
 from mdt_escaner import escanear_ancla, escanear_completo
 from mdt_estructura import TF_BUSQUEDA
 from mdt_estado import guardar_estado
@@ -27,6 +27,7 @@ AYUDA = ("Comandos:\n"
          "  analiza SYM — análisis completo puntual (1-3 min)\n"
          "  tramos SYM — mapa por tramos independientes (cada muñeca aparte)\n"
          "  operaciones — operaciones reales registradas (SL/parcial/estado)\n"
+         "  cuenta — balance virtual del modo testnet (si está activo)\n"
          "\n⚓ ANCLAS PROPIAS (tú marcas el origen del tramo):\n"
          "  ancla PRECIO [SYM] — mapea ese tramo (ciclos + zonas) y lo VIGILA;\n"
          "     avisa cuando el precio entre en una zona operativa suya.\n"
@@ -63,6 +64,24 @@ def _cmd_lista(estado):
         p = estado['simbolos'].get(s, {}).get('ultimo_precio')
         lineas.append(f"  {s}" + (f" — último {p:.2f}" if p else " — sin escanear aún"))
     return "Vigilando:\n" + '\n'.join(lineas)
+
+
+def _cmd_cuenta(estado):
+    c = estado.get('cuenta_testnet') or {}
+    balance = c.get('balance', BALANCE_VIRTUAL_INICIAL)
+    historial = c.get('historial') or []
+    pnl = balance - BALANCE_VIRTUAL_INICIAL
+    L = [f"🧪 Cuenta virtual (modo: {MDT_MODO})",
+         f"  balance: ${balance:,.2f} (arrancó en ${BALANCE_VIRTUAL_INICIAL:,.2f}, "
+         f"{pnl:+,.2f} / {pnl / BALANCE_VIRTUAL_INICIAL:+.1%})",
+         f"  riesgo por operación: {RIESGO_CUENTA_PCT:.1%} del balance actual",
+         f"  operaciones cerradas: {len(historial)}"]
+    if MDT_MODO != 'testnet':
+        L.append("  (MDT_MODO no es 'testnet': no se están colocando órdenes reales)")
+    for h in historial[-8:]:
+        L.append(f"  {h['hora'][:16]} {h['patron']} {h['fase']} ({h['r']:+.2f}R) "
+                 f"{h['pnl']:+.2f} -> ${h['balance']:,.2f}")
+    return '\n'.join(L)
 
 
 def _fecha_ancla(tok):
@@ -213,6 +232,8 @@ def atender_comando(estado, texto):
         bloques = [b for b in (texto_operaciones(s, estado['simbolos'].get(s, {}))
                                for s in estado['watchlist']) if b]
         return '\n\n'.join(bloques) if bloques else "Sin operaciones registradas aún."
+    if cmd in ('cuenta', 'balance', 'testnet'):
+        return _cmd_cuenta(estado)
 
     if cmd in ('agrega', 'add') and arg:
         if arg in estado['watchlist']:

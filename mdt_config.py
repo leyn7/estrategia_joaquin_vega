@@ -64,6 +64,18 @@ MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bu
 # construir_operacion (Secc 7) para AVISAR, no ocultar, la señal 14 jul.
 MIN_RIESGO_PCT = 0.0035
 
+# --- Ejecución real (Testnet) — regla usuario 14 jul: "que operen como si
+# fueran reales, sin meter dinero" ---
+# 'observacion' (default): el bot sigue exactamente igual que siempre, esta
+#   capa no se llama nunca.
+# 'testnet': cada gatillo nuevo coloca ÓRDENES REALES en Binance Futures
+#   TESTNET (saldo ficticio, motor de matching real) — ver mdt_ejecutor.py.
+#   La decisión de cuándo entrar/salir la sigue dando mdt_gestion (ya
+#   validada); esta capa solo la REPRODUCE con órdenes reales.
+MDT_MODO = os.environ.get('MDT_MODO', 'observacion').lower()
+BALANCE_VIRTUAL_INICIAL = float(os.environ.get('MDT_BALANCE_INICIAL', '1000'))
+RIESGO_CUENTA_PCT = float(os.environ.get('MDT_RIESGO_PCT', '0.01'))
+
 # --- Preferencia operativa (usuario, 4 jul 2026) ---
 # "Yo no trabajaría una zona macro, tardaría mucho en darme profit; prefiero
 # trabajar las zonas pequeñas que me den oportunidades de entrada y sean

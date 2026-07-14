@@ -18,7 +18,7 @@ import pandas as pd
 
 import mdt_data
 import mdt_telegram
-from mdt_config import SYMBOL
+from mdt_config import BALANCE_VIRTUAL_INICIAL, SYMBOL
 
 log = logging.getLogger('mdt.estado')
 
@@ -102,6 +102,9 @@ def cargar_estado():
     e.setdefault('watchlist', [SYMBOL])
     e.setdefault('simbolos', {})
     e.setdefault('anclas', {})
+    # Cuenta virtual del modo testnet (regla usuario 14 jul): balance en
+    # dólares que sube/baja con cada operación real cerrada en el testnet.
+    e.setdefault('cuenta_testnet', {'balance': BALANCE_VIRTUAL_INICIAL, 'historial': []})
     return e
 
 

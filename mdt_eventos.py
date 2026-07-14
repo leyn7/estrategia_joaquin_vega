@@ -69,9 +69,10 @@ def _interesa_patron(e, estado):
     return interesa
 
 
-def detectar_eventos(sym, resultado, mem):
+def detectar_eventos(sym, resultado, mem, cuenta=None, chat_id=None):
     """Compara el escaneo con la memoria del símbolo, devuelve los mensajes
-    nuevos y actualiza `mem` in place."""
+    nuevos y actualiza `mem` in place. `cuenta`/`chat_id` solo se usan para el
+    modo testnet (ver actualizar_operaciones)."""
     mapa = resultado['mapa']
     precio = mapa['precio']
     baseline = not mem.get('baseline') or mem.get('fmt') != FMT_ESTADO
@@ -169,7 +170,7 @@ def detectar_eventos(sym, resultado, mem):
     mem['ultimo_precio'] = float(precio)
 
     # 5) Operaciones reales (hechos: siempre se notifican)
-    ev_ops = actualizar_operaciones(sym, resultado, mem)
+    ev_ops = actualizar_operaciones(sym, resultado, mem, cuenta, chat_id)
 
     if baseline:
         msj = (f"👁 Vigilando {sym} (escaneo cada {INTERVALO // 60} min).\n\n"

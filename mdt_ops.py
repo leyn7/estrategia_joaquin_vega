@@ -17,7 +17,8 @@ import logging
 
 import pandas as pd
 
-from mdt_config import MAX_OPS_DIA
+import mdt_telegram
+from mdt_config import BALANCE_VIRTUAL_INICIAL, MAX_OPS_DIA, MDT_MODO, RIESGO_CUENTA_PCT
 from mdt_data import to_cot
 from mdt_estado import MAX_OPS_CERRADAS, get_klines_vivo, naive
 from mdt_formato import hora_cot
@@ -96,12 +97,83 @@ def _aviso_limite_diario(sym, ops):
     return None
 
 
-def actualizar_operaciones(sym, resultado, mem):
+def _testnet_abrir(sym, k, op, cuenta, chat_id):
+    """Coloca en el testnet la entrada+SL+TP reales que espejan este gatillo
+    (regla usuario 14 jul). Nunca tumba el registro del HECHO si falla —
+    solo avisa: la operación teórica sigue existiendo aunque el testnet falle."""
+    import mdt_ejecutor
+    tp = max(op['tp_zona']) if op['lado'] == 'SELL' else min(op['tp_zona'])
+    try:
+        r = mdt_ejecutor.abrir_posicion(sym, op['lado'], op['entrada'], op['sl'],
+                                        tp, cuenta['balance'])
+    except mdt_ejecutor.ErrorEjecucion as e:
+        log.exception("testnet: fallo abriendo %s", k)
+        mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: no se pudo abrir {k}\n{e}")
+        return
+    op['testnet'] = r
+    mdt_telegram.enviar(chat_id,
+        f"🧪📌 {sym} | TESTNET: orden real colocada ({op['patron']})\n"
+        f"  {op['lado']} qty={r['cantidad']} @ {op['entrada']:.4f} | "
+        f"SL {op['sl']:.4f} | TP {tp:.4f}\n"
+        f"  balance virtual: ${cuenta['balance']:.2f}")
+
+
+def _testnet_parcial(sym, k, op, s, chat_id):
+    """Espeja el parcial obligatorio (Secc 20): cierra la mitad a mercado y
+    mueve el SL real a breakeven."""
+    import mdt_ejecutor
+    t = op.get('testnet')
+    if t is None:
+        return
+    try:
+        mdt_ejecutor.cerrar_parcial(sym, op['lado'], t['cantidad'] / 2.0)
+        t['order_id_sl'] = mdt_ejecutor.mover_stop(
+            sym, op['lado'], t['cantidad'] / 2.0, t.get('order_id_sl'), op['entrada'])
+    except mdt_ejecutor.ErrorEjecucion as e:
+        log.exception("testnet: fallo en parcial de %s", k)
+        mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: fallo en parcial de {k}\n{e}")
+        return
+    mdt_telegram.enviar(chat_id, f"🧪💰 {sym} | TESTNET: parcial real ejecutado, "
+                                 f"SL movido a breakeven ({op['entrada']:.4f})")
+
+
+def _testnet_cerrar(sym, k, op, s, cuenta, chat_id):
+    """Cierre final (SL/BE/TP): cancela lo que quede abierto en el testnet y
+    liquida el resultado contra el balance virtual (compone, Secc 1)."""
+    import mdt_ejecutor
+    t = op.get('testnet')
+    if t is not None:
+        try:
+            mdt_ejecutor.cancelar_todas(sym)
+        except Exception:  # noqa: BLE001 — la cuenta virtual igual se liquida
+            log.exception("testnet: fallo cancelando órdenes al cerrar %s", k)
+    antes = cuenta['balance']
+    pnl = antes * RIESGO_CUENTA_PCT * s['r']
+    cuenta['balance'] = antes + pnl
+    cuenta.setdefault('historial', []).append({
+        'op': k, 'patron': op['patron'], 'fase': s['fase'], 'r': round(s['r'], 3),
+        'pnl': round(pnl, 2), 'balance': round(cuenta['balance'], 2),
+        'hora': op['hora_gatillo'],
+    })
+    mdt_telegram.enviar(chat_id,
+        f"🧪 {sym} | TESTNET: {k} cerrada por {s['fase']} ({s['r']:+.2f}R)\n"
+        f"  {pnl:+.2f} USD -> balance virtual ${cuenta['balance']:.2f} "
+        f"(arrancó en ${BALANCE_VIRTUAL_INICIAL:.2f})")
+
+
+def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
     """Registra gatillos ejecutados nuevos y sigue los abiertos con velas reales.
     Devuelve los eventos de transición (registro/parcial/breakeven/SL/TP). Las
-    operaciones son HECHOS: se notifican siempre, sin filtro de notificaciones."""
+    operaciones son HECHOS: se notifican siempre, sin filtro de notificaciones.
+
+    Si MDT_MODO='testnet' (regla usuario 14 jul) y se pasa `cuenta` (el dict
+    estado['cuenta_testnet']), cada transición además coloca/gestiona órdenes
+    REALES en Binance Futures Testnet — ver mdt_ejecutor.py. Esas notificaciones
+    van SIEMPRE por Telegram (nunca se silencian: son hechos, aunque el testnet
+    no sea dinero real)."""
     ops = mem.setdefault('operaciones', {})
     eventos = []
+    testnet = MDT_MODO == 'testnet' and cuenta is not None
 
     # 1) Registrar gatillos ejecutados nuevos (dedup por lado|ancla|patrón|entrada)
     for e in resultado['escaneos']:
@@ -116,6 +188,8 @@ def actualizar_operaciones(sym, resultado, mem):
             aviso = _aviso_limite_diario(sym, ops)
             if aviso:
                 eventos.append(aviso)
+            if testnet:
+                _testnet_abrir(sym, k, ops[k], cuenta, chat_id)
 
     # 2) Seguir cada operación no cerrada
     for k, op in list(ops.items()):
@@ -139,6 +213,11 @@ def actualizar_operaciones(sym, resultado, mem):
             if previa is None and s['fase'] == 'ABIERTA':
                 titulo = 'OPERACIÓN REGISTRADA (gatillo ejecutado)'
             eventos.append(f"{icono} {sym} | {titulo}\n{texto_op_real(op, s)}")
+            if testnet:
+                if s['fase'] == 'PARCIAL' and previa != 'PARCIAL':
+                    _testnet_parcial(sym, k, op, s, chat_id)
+                elif s['fase'] in FASES_CERRADAS:
+                    _testnet_cerrar(sym, k, op, s, cuenta, chat_id)
         op['fase'] = s['fase']
         if s['fase'] in FASES_CERRADAS:
             op['r_final'] = round(s['r'], 2)

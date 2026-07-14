@@ -4,3 +4,6 @@ __pycache__/
 *.log
 
 _cache_klines/
+
+# Secretos: nunca a git
+.env

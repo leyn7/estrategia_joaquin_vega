@@ -40,12 +40,19 @@ def escanear_simbolos(estado, tolerar_fallos=True):
     """Escanea la watchlist y actualiza su estado interno (operaciones reales,
     dedup de patrones/duelos...) — NO se notifica por Telegram (regla usuario 14
     jul: "el análisis general que siga por dentro, solo quiero los avisos de mis
-    anclas"). Lo tracked queda disponible igual con el comando `operaciones`."""
+    anclas"). Lo tracked queda disponible igual con el comando `operaciones`.
+
+    Excepción: si MDT_MODO=testnet, las operaciones SÍ colocan órdenes reales en
+    Binance Futures Testnet y esos avisos van siempre por Telegram (mdt_ops.py
+    los manda directo, no pasan por esta lista silenciada — regla usuario 14
+    jul: "que operen como si fueran reales")."""
+    cuenta = estado['cuenta_testnet']
+    chat_id = estado.get('chat_id')
     for sym in list(estado['watchlist']):
         mem = estado['simbolos'].setdefault(sym, {})
         try:
             resultado = escanear_completo(verbose=False, symbol=sym)
-            for ev in detectar_eventos(sym, resultado, mem):
+            for ev in detectar_eventos(sym, resultado, mem, cuenta, chat_id):
                 log.info("evento %s: %s", sym, ev.splitlines()[0])
         except Exception:  # noqa: BLE001 — el bucle jamás muere por un símbolo
             if not tolerar_fallos:
