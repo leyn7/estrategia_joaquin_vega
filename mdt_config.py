@@ -58,11 +58,20 @@ PARCIAL_R = 2.0      # Punto de descarga de presión (parcial mínimo 1:2, Secc 
 FINAL_R = 4.0        # Objetivo final = doble del parcial (perfil estándar 1:2 -> 1:4)
 MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bucle en vivo)
 
-# SL más cerca que esto (% de la entrada): las comisiones (entrada+salida a
-# mercado, ~0.05% c/u) se comen el riesgo antes de que el trade respire. Antes
-# solo lo aplicaba rsi3m.py (descartaba en silencio); ahora también lo usa
-# construir_operacion (Secc 7) para AVISAR, no ocultar, la señal 14 jul.
-MIN_RIESGO_PCT = 0.0035
+# Comisión de ida y vuelta (taker a la entrada + taker a la salida, 0.05% c/u).
+# No es un detalle: SUMA a lo que pierdes en el stop y RESTA de lo que ganas en
+# el TP, así que un 1:3 bruto puede no ser un 1:3 real (regla usuario 14 jul:
+# "que cuando sea 1:3 verdaderamente sea 1:3, no que las comisiones nos resten").
+COMISION_IDA_VUELTA = 0.001
+
+# SL más cerca que esto (% de la entrada): las comisiones se comen el riesgo antes
+# de que el trade respire. Lo que pesa NO es cuántos dólares arriesgues, sino lo
+# ceñido que sea el stop en PORCENTAJE: la comisión se lleva 0.1%/riesgo_pct de tu
+# riesgo. Con 0.35% se llevaba el 29% de cada pérdida; con 0.5% se lleva el 20%
+# (regla usuario 14 jul: "la idea es que las operaciones sean rentables").
+#   SL 0.09% -> comisión = 111% del riesgo (la comisión sola supera al stop)
+#   SL 0.35% -> 29%   |   SL 0.50% -> 20%   |   SL 1% -> 10%   |   SL 2% -> 5%
+MIN_RIESGO_PCT = 0.005
 
 # --- Ejecución real (Testnet) — regla usuario 14 jul: "que operen como si
 # fueran reales, sin meter dinero" ---

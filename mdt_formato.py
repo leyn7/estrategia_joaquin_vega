@@ -24,11 +24,14 @@ def texto_operacion(op):
         return ''
     ver = (f"CUMPLE 1:{RATIO_MINIMO:.0f}" if op['cumple_ratio']
            else f"NO CUMPLE 1:{RATIO_MINIMO:.0f} -> NO OPERAR")
+    # El ratio que manda es el NETO (tras comisiones): es el dinero que entra
+    neto = op.get('ratio_neto', op['ratio'])
     txt = (f"\n  Entrada {op['entrada']:.2f} | SL {op['stop_loss']:.2f} "
-           f"(riesgo {op['riesgo']:.2f})"
+           f"(riesgo {op['riesgo']:.2f} = {op.get('riesgo_pct', 0):.2%})"
            f"\n  TP zona {op['tp_zona'][0]:.2f}-{op['tp_zona'][1]:.2f}"
-           f"\n  R:B 1:{op['ratio']:.1f} [{ver}] | {op['movimiento']}"
-           f"\n  Volumen: {op['volumen']}")
+           f"\n  R:B 1:{neto:.1f} NETO (bruto 1:{op['ratio']:.1f}, "
+           f"comisión {op.get('comision', 0):.2f}) [{ver}]"
+           f"\n  {op['movimiento']} | Volumen: {op['volumen']}")
     if op.get('aviso'):
         txt += f"\n  ⚠ {op['aviso']}"
     return txt

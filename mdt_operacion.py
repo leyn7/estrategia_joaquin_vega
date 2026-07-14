@@ -6,7 +6,8 @@ objetivo (la zona contraria) y ratio. La extracción de entrada/SL vive en
 mdt_gestion (única fuente de verdad, la misma que usan el registro de
 operaciones reales y el backtest); aquí se le añade el objetivo y el veredicto.
 """
-from mdt_config import MIN_RIESGO_PCT, RATIO_MINIMO, ZONA_MAX_OPERABLE_PCT
+from mdt_config import (COMISION_IDA_VUELTA, MIN_RIESGO_PCT, RATIO_MINIMO,
+                        ZONA_MAX_OPERABLE_PCT)
 from mdt_gestion import entrada_de_resultado
 
 # Estados que representan un setup accionable o vivo (para resaltar en el reporte)
@@ -73,6 +74,17 @@ def construir_operacion(escaneo, prioritaria):
         return None
     recompensa = abs(entrada - tp)
     ratio = recompensa / riesgo
+
+    # RATIO NETO (regla usuario 14 jul): "que cuando sea 1:3 verdaderamente sea
+    # 1:3, no que las comisiones nos resten de ese TP". Entrar y salir a mercado
+    # cuesta ~COMISION_IDA_VUELTA del precio: esa comisión SUMA a lo que pierdes
+    # si salta el stop y RESTA de lo que ganas si llega el TP. Con stops ceñidos
+    # el mordisco es brutal (SL al 0.09% del precio -> la comisión sola supera al
+    # riesgo entero). El veredicto 1:3 se juzga con este ratio, no con el bruto.
+    comision = entrada * COMISION_IDA_VUELTA
+    perdida_real = riesgo + comision
+    ganancia_real = recompensa - comision
+    ratio_neto = ganancia_real / perdida_real if perdida_real > 0 else 0.0
     # Regla del usuario (10 jul): la señal HEREDA la prioridad de SU zona — si
     # una zona en trabajo te da la entrada, esa operación es el Movimiento
     # Prioritario de ese trabajo, con sus propios TP ("en el trading nada es
@@ -93,10 +105,15 @@ def construir_operacion(escaneo, prioritaria):
         avisos.append(f"SL demasiado ajustado ({riesgo_pct:.2%} de riesgo, {riesgo:.2f} en "
                        f"precio): las comisiones se lo comen — necesita al menos "
                        f"{MIN_RIESGO_PCT:.2%} ({riesgo_min:.2f})")
+    if ratio >= RATIO_MINIMO > ratio_neto:
+        avisos.append(f"el 1:{ratio:.1f} es BRUTO: tras comisiones queda en "
+                      f"1:{ratio_neto:.1f} y NO llega al 1:{RATIO_MINIMO:.0f}")
     return {"entrada": entrada, "stop_loss": sl,
             "tp_zona": (max(tp_zona), min(tp_zona)), "tp_nivel": tp,
             "riesgo": riesgo, "recompensa": recompensa, "ratio": ratio,
-            "cumple_ratio": ratio >= RATIO_MINIMO,
+            # El veredicto manda sobre el NETO: es el dinero que de verdad entra
+            "ratio_neto": ratio_neto, "comision": comision,
+            "cumple_ratio": ratio_neto >= RATIO_MINIMO,
             "riesgo_pct": riesgo_pct, "cumple_riesgo_minimo": cumple_riesgo_minimo,
             "movimiento": "PRIORITARIO (su zona en trabajo)",
             "aviso": " | ".join(avisos) or None,
