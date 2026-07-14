@@ -24,16 +24,25 @@ from mdt_reporte_escaner import imprimir_escaneo_mapa, imprimir_escaneo_tramos
 from mdt_patrones import detect_patron_institucional
 
 VELAS_ESCANEO = 1500  # ventana máxima de velas de la TF del patrón
+# Lupa del ancla manual (regla usuario 13 jul): el patrón de las zonas de un ancla
+# suya se lee como mucho en 3m. El mapa automático conserva la escalera de la
+# biblia (Secc 10: una TF por debajo del ciclo); esto solo afecta a lo que él pide.
+TF_ANCLA_FINA = "3m"
 
 
-def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio):
+def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio, tf_fina=None):
     """Escanea la cadena de patrones de UNA zona (episodio operativo recortado).
 
     Secc 13 (checklist 1): el patrón solo vale dentro de una zona ACTIVA — la
     ventana arranca en operativa_desde (activación del ciclo o apertura de la
     excursión); la estructura anterior es historia de otro contexto.
+
+    tf_fina: tope de finura para el patrón (regla usuario 13 jul: en el ancla que
+    él marca a mano, "bajemos la temporalidad hasta 3m para chequearla mejor").
     """
     tf_patron = TF_PATRON.get(zona['tf'], zona['tf'])
+    if tf_fina is not None and TF_MINUTOS[tf_fina] < TF_MINUTOS[tf_patron]:
+        tf_patron = tf_fina
     if tf_patron not in cache_df:
         desde = limite - pd.Timedelta(minutes=VELAS_ESCANEO * TF_MINUTOS[tf_patron])
         df = _descargar(tf_patron, desde, cutoff, symbol)
@@ -54,7 +63,32 @@ def _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, precio):
             'tf_ciclo': zona['tf'], 'tf_patron': tf_patron,
             'ancla': zona.get('ancla'), 'tp_zona': zona.get('tp_zona'),
             'ciclo_origen': zona.get('ciclo_origen'), 'ciclo_fin': zona.get('ciclo_fin'),
-            'contexto': es_contexto, 'operativa_desde': desde_op, 'resultado': res}
+            'contexto': es_contexto, 'operativa_desde': desde_op, 'resultado': res,
+            **_escala_zona(df_z, zmax, zmin, tf_patron)}
+
+
+def _escala_zona(df_z, zmax, zmin, tf_patron):
+    """¿Cabe un patrón dentro de esta zona, en la TF que le toca? (regla usuario
+    13 jul: "avísame cuando el ciclo tenga la zona tan pequeña que no cumple el
+    requisito para operar").
+
+    Una Pauta necesita estructura de 2+2 velas DENTRO de la zona. Si la vela
+    típica de la TF del patrón es casi tan grande como la zona entera, ahí no se
+    puede dibujar nada: el escáner dirá "no hay picos en la zona" para siempre,
+    aunque el precio la esté trabajando a la vista (caso real: Media 570.32-568.48
+    del ciclo 572.16 — 1.84 puntos de ancho, mirada con velas de 15m; en 15m: 0
+    picos dentro, en 1m: 10).
+
+    NO se cambia la temporalidad por su cuenta (eso alteraría los stops y la
+    estrategia): se AVISA de que la zona no es operable a su escala.
+    """
+    ancho = zmax - zmin
+    if not len(df_z) or ancho <= 0:
+        return {'vela_tf': None, 'estrecha': False}
+    vela = float((df_z['high'] - df_z['low']).tail(100).median())
+    # Con la vela típica por encima de 1/3 de la zona, no caben las 2+2 velas
+    return {'vela_tf': vela, 'estrecha': vela > ancho / 3.0,
+            'ancho_zona': ancho, 'tf_patron_usada': tf_patron}
 
 
 def escanear_mapa(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
@@ -123,12 +157,17 @@ def escanear_tramos(cutoff=None, mapa=None, verbose=True, symbol=SYMBOL):
     return {'mapa': mapa, 'escaneos': escaneos, 'duelos': duelos}
 
 
-def escanear_ancla(a, cutoff=None, symbol=SYMBOL):
+def escanear_ancla(a, cutoff=None, symbol=SYMBOL, tf_fina=TF_ANCLA_FINA):
     """Patrones de las zonas del tramo que marcó el operador (regla usuario 13
     jul: "necesito que me termine el análisis — qué está ocurriendo o qué ocurrió
     en alguna de sus zonas"). El mapa del ancla dice DÓNDE están las zonas; esto
     dice QUÉ ha pasado dentro de ellas: toda la cadena de engaños del episodio
     (res['historial']), no solo el estado vigente.
+
+    El patrón se lee como MUCHO en `tf_fina` (3m, regla usuario 13 jul): las zonas
+    de un ancla suya suelen ser estrechas y la TF de la escalera (15m para un ciclo
+    de 30m) tiene velas tan grandes como la zona entera — ahí no se puede dibujar
+    ninguna Pauta y el escáner se quedaba ciego mientras el precio la trabajaba.
 
     Devuelve la lista de escaneos, con su operación si el patrón es accionable."""
     limite = cutoff if cutoff is not None else _ahora()
@@ -137,7 +176,8 @@ def escanear_ancla(a, cutoff=None, symbol=SYMBOL):
     for lado, zona in a['zonas']:
         if zona.get('z') is None or zona.get('tf') is None:
             continue
-        e = _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, a['precio'])
+        e = _escanear_zona(zona, lado, limite, cutoff, symbol, cache_df, a['precio'],
+                           tf_fina=tf_fina)
         e['tramo'] = f"Ancla {a['ancla']:.2f}"
         if es_accionable(e):
             e['operacion'] = construir_operacion(e, None)

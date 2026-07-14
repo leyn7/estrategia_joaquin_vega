@@ -34,6 +34,19 @@ def texto_operacion(op):
     return txt
 
 
+def texto_zona_estrecha(e):
+    """Aviso de zona demasiado pequeña para su temporalidad de patrón (el bot no
+    puede ver estructura ahí dentro, aunque el precio la esté trabajando)."""
+    if not e.get('estrecha'):
+        return []
+    ancho, vela, tf = e.get('ancho_zona'), e.get('vela_tf'), e['tf_patron']
+    return [f"   ⚠ ZONA MUY PEQUEÑA PARA SU ESCALA: mide {ancho:.2f} y la vela típica "
+            f"de {tf} mide {vela:.2f}.",
+            f"      No caben las 2+2 velas de una Pauta: el patrón NO se puede leer aquí "
+            f"(por eso no ve nada aunque el precio la trabaje).",
+            f"      Ciclo {e['ancla']:.2f} ({e['tf_ciclo']}): zona NO OPERABLE a su escala."]
+
+
 def texto_escaneo(e):
     """Un patrón con su ciclo (origen → fin), su zona y, si es accionable, la
     operación completa."""
@@ -57,6 +70,8 @@ def texto_escaneo(e):
         txt += f"\n  🐌 llegada lenta (camping): {d.get('cierres_dentro')} cierres dentro"
     if hora:
         txt += f"\n  hora: {hora}"
+    for linea in texto_zona_estrecha(e):
+        txt += "\n" + linea
     return txt + texto_operacion(e.get('operacion'))
 
 
@@ -139,6 +154,7 @@ def texto_zonas_ancla(escaneos, precio):
             if e.get('ciclo_origen') is not None and e.get('ciclo_fin') is not None:
                 ciclo = f": {e['ciclo_origen']:.2f} → {e['ciclo_fin']:.2f}"
             L.append(f"   ⚓ ancla del ciclo: {e['ancla']:.2f} ({e['tf_ciclo']}){ciclo}")
+        L += texto_zona_estrecha(e)
 
         previos = [h for h in (res.get('historial') or []) if h is not res]
         if previos:

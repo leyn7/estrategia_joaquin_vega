@@ -22,7 +22,9 @@ import pandas as pd
 from mdt_config import ZONA_MAX_OPERABLE_PCT
 from mdt_operacion import ESTADOS_OPERABLES
 from mdt_estado import INTERVALO, naive, podar_firmas
-from mdt_formato import hora_cot, resumen_analisis, texto_escaneo
+from mdt_escaner import escanear_ancla
+from mdt_formato import (hora_cot, resumen_analisis, texto_escaneo,
+                         texto_zona_estrecha)
 from mdt_ops import actualizar_operaciones, texto_operaciones
 
 log = logging.getLogger('mdt.eventos')
@@ -230,6 +232,14 @@ def vigilar_anclas(estado):
         precio = a['precio']
         vistas = v.setdefault('zonas_vistas', {})
         activas = set()
+        # El escaneo de las zonas del ancla: dice si el patrón se puede LEER ahí
+        # (zona demasiado pequeña para su TF) y qué ha pasado dentro
+        try:
+            escaneos = {(e['lado'], round(e['rango'][0], 2), round(e['rango'][1], 2)): e
+                        for e in escanear_ancla(a, symbol=v['symbol'])}
+        except Exception:  # noqa: BLE001 — el aviso de zona no depende de esto
+            log.exception("escaneo del ancla %s", clave)
+            escaneos = {}
         for lado, z in a['zonas']:
             if not z.get('z') or z.get('ancla') is None:
                 continue
@@ -239,13 +249,15 @@ def vigilar_anclas(estado):
             dentro = bool(zmin <= precio <= zmax)
             if dentro and not vistas.get(k):
                 accion = 'VENTAS' if lado == 'SELL' else 'COMPRAS'
+                e = escaneos.get((lado, round(zmax, 2), round(zmin, 2)))
+                aviso = "\n".join(texto_zona_estrecha(e)) if e else ""
+                cola = ("\n" + aviso) if aviso else "\n  A vigilar formación de patrón (3 Pautas)."
                 eventos.append(
                     f"⚓🎯 {v['symbol']} | PRECIO EN ZONA DEL ANCLA {a['ancla']:.2f}\n"
                     f"{z['name']}: {zmax:.2f}-{zmin:.2f} ({accion})\n"
                     f"  precio {precio:.2f} | ciclo {z.get('tf', '?')} "
                     f"(ancla {z['ancla']:.2f})\n"
-                    f"  tramo: {a['ancla']:.2f} → {a['extremo']:.2f}\n"
-                    "  A vigilar formación de patrón (3 Pautas).")
+                    f"  tramo: {a['ancla']:.2f} → {a['extremo']:.2f}" + cola)
             vistas[k] = dentro
         for k in list(vistas):          # zonas que ya no existen en el tramo
             if k not in activas:
