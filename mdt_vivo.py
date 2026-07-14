@@ -33,7 +33,7 @@ import mdt_telegram
 from mdt_estado import INTERVALO, RUTA_ESTADO, cargar_estado, guardar_estado
 from mdt_comandos import procesar_comandos
 from mdt_escaner import escanear_completo
-from mdt_eventos import detectar_eventos, vigilar_anclas
+from mdt_eventos import detectar_eventos, vigilar_anclas, vigilar_rsi3m
 
 
 def escanear_simbolos(estado, tolerar_fallos=True):
@@ -53,13 +53,15 @@ def escanear_simbolos(estado, tolerar_fallos=True):
 
 
 def revisar_anclas(estado):
-    """Anclas marcadas por el operador: avisa si el precio entró en sus zonas."""
-    try:
-        for ev in vigilar_anclas(estado):
-            log.info("evento ancla: %s", ev.splitlines()[0])
-            mdt_telegram.enviar(estado.get('chat_id'), ev)
-    except Exception:  # noqa: BLE001
-        log.exception("vigilancia de anclas falló")
+    """Anclas marcadas por el operador: avisa si el precio entró en sus zonas, y
+    las señales de la rsi_3m en las anclas donde él pidió esa estrategia."""
+    for nombre, vigilar in (("anclas", vigilar_anclas), ("rsi3m", vigilar_rsi3m)):
+        try:
+            for ev in vigilar(estado):
+                log.info("evento %s: %s", nombre, ev.splitlines()[0])
+                mdt_telegram.enviar(estado.get('chat_id'), ev)
+        except Exception:  # noqa: BLE001 — una vigilancia rota no tumba el bucle
+            log.exception("vigilancia de %s falló", nombre)
     guardar_estado(estado)
 
 

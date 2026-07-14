@@ -287,6 +287,33 @@ def main():
     resumen("SOLO LLEGADA BARRIDO gestionado", barrido,
             campo_r='g_r', campo_res='g_resultado')
 
+    # ¿DÓNDE SE GANA Y DÓNDE SE QUEMAN CARTUCHOS? (pregunta del usuario, 13 jul:
+    # "quemamos cartuchos en los otros engaños y muchas veces llegamos hasta el
+    # último patrón, que es el Engaño Extremo — quiero enfocarme solo en ese").
+    # Aquí se ve con datos: cuánto aporta cada TIPO de patrón y cada NIVEL de la
+    # cadena (1º/2º/3º engaño), con y sin gestión.
+    print("\n--- POR TIPO DE PATRÓN (con ratio 1:3) ---")
+    PATRONES = {
+        'EE_GATILLO': 'Engaño EXTREMO (Secc 17, el último cartucho)',
+        'GATILLO_ACTIVADO': 'Engaño completo, 3 Pautas (Secc 9-13)',
+        'P3_CORTA_GATILLO': 'Entrada Profunda / Pauta 3 corta (Secc 16)',
+        'DT_IMPULSO_GATILLO': 'Doble Techo/Suelo con Impulso (Secc 18)',
+    }
+    vivos = {o['estado'] for o in con_ratio}
+    for est in sorted(vivos, key=lambda e: -sum(1 for o in con_ratio if o['estado'] == e)):
+        sub = [o for o in con_ratio if o['estado'] == est]
+        resumen(f"  {PATRONES.get(est, est)}", sub)
+        resumen(f"  {PATRONES.get(est, est)} [gestionado]", sub,
+                campo_r='g_r', campo_res='g_resultado')
+
+    print("\n--- POR NIVEL DE LA CADENA (¿se queman cartuchos en los primeros?) ---")
+    for niv in ("PRIMER ENGAÑO", "SEGUNDO ENGAÑO", "TERCER ENGAÑO"):
+        sub = [o for o in con_ratio if o.get('nivel_engano') == niv]
+        resumen(f"  {niv}", sub)
+    otros = [o for o in con_ratio if o.get('nivel_engano', '?') not in
+             ("PRIMER ENGAÑO", "SEGUNDO ENGAÑO", "TERCER ENGAÑO")]
+    resumen("  ENGAÑO EXTREMO / fuera de la cadena", otros)
+
 
 if __name__ == "__main__":
     main()

@@ -179,6 +179,38 @@ def detectar_eventos(sym, resultado, mem):
     return eventos + ev_ops
 
 
+def vigilar_rsi3m(estado):
+    """Estrategia RSI_3M bajo demanda (regla usuario 13 jul): el operador marca
+    un mínimo/máximo y dice "a partir de aquí opérame con rsi_3m". Aquí se
+    vigilan esas anclas y se avisa de CADA señal nueva. Estrategia pura: largos y
+    cortos, sin condición de techo/piso y sin filtros — el contexto lo pone él."""
+    from mdt_rsi3m import desde_ancla
+    eventos = []
+    for clave, v in list((estado.get('rsi3m') or {}).items()):
+        try:
+            trades, _, _ = desde_ancla(v['ancla'], pd.Timestamp(v['ancla_time']),
+                                       symbol=v['symbol'])
+        except Exception:  # noqa: BLE001 — una vigilancia rota no tumba el bucle
+            log.exception("vigilancia rsi3m %s", clave)
+            continue
+        vistas = v.setdefault('senales_vistas', [])
+        for t in trades:
+            k = f"{t['side']}|{str(t['dt'])[:16]}"
+            if k in vistas:
+                continue
+            vistas.append(k)
+            lado = 'COMPRA' if t['side'] == 'long' else 'VENTA'
+            estado_txt = ('señal VIVA ahora' if t['resultado'] == 'ABIERTA'
+                          else f"ya cerró en {t['resultado']} ({t['R']:+.2f}R)")
+            eventos.append(
+                f"📈 RSI_3M | {lado} {v['symbol']} (ancla {v['ancla']:.2f})\n"
+                f"  entrada {t['entry']:.2f} | SL {t['sl']:.2f} | TP 1:10 {t['tp']:.2f}\n"
+                f"  riesgo {t['riesgo_pct'] * 100:.2f}% | {hora_cot(t['dt'])}\n"
+                f"  {estado_txt}")
+        del vistas[:-40]   # solo la cola reciente: el estado no crece para siempre
+    return eventos
+
+
 def vigilar_anclas(estado):
     """Anclas marcadas por el OPERADOR (regla usuario 13 jul): re-mapea cada
     tramo en cada escaneo — el extremo se mueve con el precio — y avisa cuando el

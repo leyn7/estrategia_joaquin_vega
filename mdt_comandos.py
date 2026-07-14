@@ -15,7 +15,7 @@ from mdt_config import SYMBOL, TZ_LOCAL
 from mdt_escaner import escanear_ancla, escanear_completo
 from mdt_estructura import TF_BUSQUEDA
 from mdt_estado import guardar_estado
-from mdt_formato import resumen_analisis, texto_zonas_ancla
+from mdt_formato import resumen_analisis, texto_rsi3m, texto_zonas_ancla
 from mdt_ops import texto_operaciones
 
 log = logging.getLogger('mdt.comandos')
@@ -37,6 +37,12 @@ AYUDA = ("Comandos:\n"
          "     Nivel repetido: ancla 560.58 08/07   (fecha en tu horario)\n"
          "  anclas — las anclas que estoy vigilando\n"
          "  borra ancla PRECIO — dejar de vigilarla\n"
+         "\n📈 RSI_3M BAJO DEMANDA (solo cuando tú lo digas):\n"
+         "  rsi3m PRECIO [SYM] [TF] [FECHA]\n"
+         "     'a partir de este mínimo/máximo, opérame con rsi_3m'.\n"
+         "     Estrategia PURA: largos y cortos, sin filtros, TP 1:10.\n"
+         "     Te aviso de cada señal nueva.\n"
+         "  borra rsi3m PRECIO — dejar de aplicarla\n"
          "  ayuda — esto")
 
 
@@ -127,6 +133,46 @@ def _cmd_ancla(estado, partes):
         return f"Error mapeando el ancla: {e}"
 
 
+def _cmd_rsi3m(estado, partes):
+    """rsi3m PRECIO [SYM] [TF] [FECHA] — "a partir de este mínimo/máximo, opérame
+    con rsi_3m" (regla usuario 13 jul).
+
+    Estrategia PURA: largos y cortos, SIN la condición de no romper el techo/piso
+    y SIN filtros (ni banda de 1h, ni EMA, ni sesgo). El contexto lo pone él: por
+    eso solo corre cuando él lo pide. El bot automático bot_rsi5m sigue con sus
+    filtros por su lado, intacto.
+    """
+    try:
+        precio_a = float(partes[0].replace(',', '.'))
+    except (ValueError, IndexError):
+        return "Uso: rsi3m 560.58 [SYM] [TF] [FECHA]"
+    resto = [p.lower() for p in partes[1:]]
+    sym = next((p.upper() for p in partes[1:] if p.upper().endswith('USDT')), SYMBOL)
+    tf_b = next((p for p in resto if p in TF_BUSQUEDA), "30m")
+    fecha = next((f for f in (_fecha_ancla(p) for p in resto) if f is not None), None)
+
+    mdt_telegram.enviar(estado['chat_id'],
+                        f"📈 Aplicando rsi_3m desde {precio_a:.2f}...")
+    try:
+        from mdt_estructura import localizar_ancla
+        from mdt_rsi3m import desde_ancla
+        loc = localizar_ancla(precio_a, symbol=sym, tf=tf_b, fecha=fecha)
+        if loc is None:
+            return f"No pude ubicar {precio_a:.2f} en el gráfico de {sym}."
+        t_ancla, _dir, precio_real, _alt = loc
+        trades, descartadas, _ = desde_ancla(precio_real, t_ancla, symbol=sym)
+
+        estado.setdefault('rsi3m', {})[f"{sym}|{precio_real:.2f}"] = {
+            'symbol': sym, 'ancla': precio_real, 'ancla_time': str(t_ancla),
+            'senales_vistas': [f"{t['side']}|{str(t['dt'])[:16]}" for t in trades],
+        }
+        guardar_estado(estado)
+        return texto_rsi3m(sym, precio_real, t_ancla, trades, descartadas)
+    except Exception as e:  # noqa: BLE001 — se le reporta al operador
+        log.exception("rsi3m %s", precio_a)
+        return f"Error aplicando rsi_3m: {e}"
+
+
 def _cmd_borra_ancla(estado, partes):
     try:
         p = float(partes[2].replace(',', '.'))
@@ -173,6 +219,31 @@ def atender_comando(estado, texto):
 
     if cmd == 'ancla' and len(partes) > 1:
         return _cmd_ancla(estado, partes)
+
+    # rsi_3m bajo demanda. Se acepta pegado tal cual él lo escribe:
+    #   "rsi3m 560.58"  |  "aplica entradas rsi3m 560.58"
+    if cmd in ('rsi3m', 'rsi_3m', 'rsi') and len(partes) > 1:
+        return _cmd_rsi3m(estado, partes[1:])
+    if cmd == 'aplica' and len(partes) > 3 and partes[2].lower().replace('_', '') == 'rsi3m':
+        return _cmd_rsi3m(estado, partes[3:])
+    if cmd == 'rsi3m' or (cmd == 'aplica' and len(partes) <= 3):
+        return ("Uso: rsi3m 560.58 [SYM] [TF] [FECHA]\n"
+                "  o: aplica entradas rsi3m 560.58\n"
+                "Aplica la rsi_3m PURA (largos y cortos, sin filtros, TP 1:10) "
+                "desde ese mínimo/máximo, y te avisa de cada señal nueva.")
+    if cmd == 'rsi3m_off' or (cmd == 'borra' and len(partes) > 2
+                              and partes[1].lower() in ('rsi3m', 'rsi_3m')):
+        r = estado.setdefault('rsi3m', {})
+        try:
+            p = float(partes[2].replace(',', '.'))
+        except (ValueError, IndexError):
+            return "Uso: borra rsi3m 560.58"
+        fuera = [k for k in r if abs(r[k]['ancla'] - p) < 0.01]
+        for k in fuera:
+            r.pop(k)
+        guardar_estado(estado)
+        return (f"🗑 rsi_3m del ancla {p:.2f} desactivada." if fuera
+                else f"No estaba aplicando rsi_3m en {p:.2f}.")
     if cmd == 'anclas':
         anclas = estado.get('anclas') or {}
         if not anclas:

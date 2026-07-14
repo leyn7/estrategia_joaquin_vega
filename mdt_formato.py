@@ -156,6 +156,39 @@ def texto_zonas_ancla(escaneos, precio):
     return '\n'.join(L)
 
 
+def texto_rsi3m(sym, ancla, ancla_time, trades, descartadas):
+    """Lo que ha hecho la rsi_3m desde el ancla que marcó el operador."""
+    L = [f"📈 RSI_3M {sym} desde {ancla:.2f} ({hora_cot(ancla_time)})",
+         "   estrategia pura: largos y cortos, sin filtros, TP 1:10"]
+    vivas = [t for t in trades if t['resultado'] == 'ABIERTA']
+    cerradas = [t for t in trades if t['resultado'] in ('TP', 'SL')]
+    if not trades:
+        L.append("\nSin señales desde el ancla. 👁 VIGILANDO: te aviso en cuanto haya una.")
+        return '\n'.join(L)
+
+    if cerradas:
+        r = sum(t['R'] for t in cerradas)
+        ganadas = sum(1 for t in cerradas if t['resultado'] == 'TP')
+        L.append(f"\nYA OCURRIERON ({len(cerradas)}, ganadas {ganadas}, R {r:+.2f}):")
+        for t in cerradas:
+            icono = '✅' if t['resultado'] == 'TP' else '❌'
+            lado = 'COMPRA' if t['side'] == 'long' else 'VENTA'
+            L.append(f"  {icono} {lado} {hora_cot(t['dt'])} | entrada {t['entry']:.2f} "
+                     f"SL {t['sl']:.2f} → {t['resultado']} ({t['R']:+.2f}R)")
+    if vivas:
+        L.append("\n🔥 SEÑAL VIVA AHORA:")
+        for t in vivas:
+            lado = 'COMPRA' if t['side'] == 'long' else 'VENTA'
+            L.append(f"  {lado} | entrada {t['entry']:.2f} | SL {t['sl']:.2f} "
+                     f"| TP 1:10 {t['tp']:.2f}\n"
+                     f"  riesgo {t['riesgo_pct'] * 100:.2f}% | {hora_cot(t['dt'])}")
+    if descartadas:
+        L.append(f"\n({descartadas} setup(s) descartado(s): SL demasiado pegado, "
+                 "las comisiones se lo comen)")
+    L.append("\n👁 VIGILANDO: te aviso de cada señal nueva de rsi_3m en este ancla.")
+    return '\n'.join(L)
+
+
 def resumen_analisis(sym, resultado):
     """Resumen compacto de un escaneo completo (arranque y comando 'analiza')."""
     mapa = resultado['mapa']
