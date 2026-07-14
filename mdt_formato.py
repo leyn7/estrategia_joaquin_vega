@@ -156,10 +156,10 @@ def texto_zonas_ancla(escaneos, precio):
     return '\n'.join(L)
 
 
-def texto_rsi3m(sym, ancla, ancla_time, trades, descartadas):
+def texto_rsi3m(sym, ancla, ancla_time, trades, descartadas, lados_txt="compras y ventas"):
     """Lo que ha hecho la rsi_3m desde el ancla que marcó el operador."""
     L = [f"📈 RSI_3M {sym} desde {ancla:.2f} ({hora_cot(ancla_time)})",
-         "   estrategia pura: largos y cortos, sin filtros, TP 1:10"]
+         f"   estrategia pura: {lados_txt}, sin filtros, TP 1:10"]
     vivas = [t for t in trades if t['resultado'] == 'ABIERTA']
     cerradas = [t for t in trades if t['resultado'] in ('TP', 'SL')]
     if not trades:

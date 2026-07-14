@@ -188,8 +188,10 @@ def vigilar_rsi3m(estado):
     eventos = []
     for clave, v in list((estado.get('rsi3m') or {}).items()):
         try:
+            # El lado lo eligió él al pedirla ("rsi3m 562.52 compras")
+            lados = tuple(v.get('lados') or ("long", "short"))
             trades, _, _ = desde_ancla(v['ancla'], pd.Timestamp(v['ancla_time']),
-                                       symbol=v['symbol'])
+                                       symbol=v['symbol'], lados=lados)
         except Exception:  # noqa: BLE001 — una vigilancia rota no tumba el bucle
             log.exception("vigilancia rsi3m %s", clave)
             continue

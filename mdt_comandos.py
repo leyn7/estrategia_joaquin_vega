@@ -38,10 +38,11 @@ AYUDA = ("Comandos:\n"
          "  anclas — las anclas que estoy vigilando\n"
          "  borra ancla PRECIO — dejar de vigilarla\n"
          "\n📈 RSI_3M BAJO DEMANDA (solo cuando tú lo digas):\n"
-         "  rsi3m PRECIO [SYM] [TF] [FECHA]\n"
+         "  rsi3m PRECIO [compras|ventas] [SYM] [TF] [FECHA]\n"
          "     'a partir de este mínimo/máximo, opérame con rsi_3m'.\n"
-         "     Estrategia PURA: largos y cortos, sin filtros, TP 1:10.\n"
-         "     Te aviso de cada señal nueva.\n"
+         "     Estrategia PURA: sin filtros, TP 1:10. Te aviso de cada señal.\n"
+         "     Sin decir nada opera los DOS lados (la dirección la marca el RSI).\n"
+         "     Acotarlo:  rsi3m 562.52 compras\n"
          "  borra rsi3m PRECIO — dejar de aplicarla\n"
          "  ayuda — esto")
 
@@ -150,9 +151,18 @@ def _cmd_rsi3m(estado, partes):
     sym = next((p.upper() for p in partes[1:] if p.upper().endswith('USDT')), SYMBOL)
     tf_b = next((p for p in resto if p in TF_BUSQUEDA), "30m")
     fecha = next((f for f in (_fecha_ancla(p) for p in resto) if f is not None), None)
+    # Qué lado operar. Por defecto los dos: la dirección la marca el RSI, no el
+    # ancla (él puede marcar un mínimo y que el RSI arme una venta). Si él lo
+    # acota, manda él: "rsi3m 562.52 compras".
+    solo_compras = any(p in ('compras', 'compra', 'largos', 'long') for p in resto)
+    solo_ventas = any(p in ('ventas', 'venta', 'cortos', 'short') for p in resto)
+    lados = (("long",) if solo_compras and not solo_ventas else
+             ("short",) if solo_ventas and not solo_compras else ("long", "short"))
 
+    lados_txt = ("solo COMPRAS" if lados == ("long",) else
+                 "solo VENTAS" if lados == ("short",) else "compras y ventas")
     mdt_telegram.enviar(estado['chat_id'],
-                        f"📈 Aplicando rsi_3m desde {precio_a:.2f}...")
+                        f"📈 Aplicando rsi_3m desde {precio_a:.2f} ({lados_txt})...")
     try:
         from mdt_estructura import localizar_ancla
         from mdt_rsi3m import desde_ancla
@@ -160,14 +170,15 @@ def _cmd_rsi3m(estado, partes):
         if loc is None:
             return f"No pude ubicar {precio_a:.2f} en el gráfico de {sym}."
         t_ancla, _dir, precio_real, _alt = loc
-        trades, descartadas, _ = desde_ancla(precio_real, t_ancla, symbol=sym)
+        trades, descartadas, _ = desde_ancla(precio_real, t_ancla, symbol=sym, lados=lados)
 
         estado.setdefault('rsi3m', {})[f"{sym}|{precio_real:.2f}"] = {
             'symbol': sym, 'ancla': precio_real, 'ancla_time': str(t_ancla),
+            'lados': list(lados),
             'senales_vistas': [f"{t['side']}|{str(t['dt'])[:16]}" for t in trades],
         }
         guardar_estado(estado)
-        return texto_rsi3m(sym, precio_real, t_ancla, trades, descartadas)
+        return texto_rsi3m(sym, precio_real, t_ancla, trades, descartadas, lados_txt)
     except Exception as e:  # noqa: BLE001 — se le reporta al operador
         log.exception("rsi3m %s", precio_a)
         return f"Error aplicando rsi_3m: {e}"
