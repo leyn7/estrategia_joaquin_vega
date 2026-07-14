@@ -8,13 +8,17 @@ operaciones reales y el backtest); aquí se le añade el objetivo y el veredicto
 """
 from mdt_config import (COMISION_IDA_VUELTA, MIN_RIESGO_PCT, RATIO_MINIMO,
                         ZONA_MAX_OPERABLE_PCT)
-from mdt_gestion import entrada_de_resultado
+from mdt_gestion import entrada_de_resultado, se_opera
 
-# Estados que representan un setup accionable o vivo (para resaltar en el reporte)
-ESTADOS_OPERABLES = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO",
-                     "EE_GATILLO", "EE_ARMADO", "VALIDADO_POSTERIOR",
-                     "ENTRADA_PROFUNDA_ESPERANDO", "DT_IMPULSO_ESPERANDO",
-                     "ENGAÑO_EN_CURSO", "ESPERANDO_1618")
+# Estados que representan un setup accionable o vivo. La lista COMPLETA la conoce
+# el motor (el mapa sigue viendo todos los patrones); lo que se OPERA lo decide
+# FAMILIAS_OPERABLES — con el año delante, solo Entrada Profunda y Engaño Extremo:
+# las otras dos familias (3 Pautas y Doble Techo) PERDIERON dinero. Ver mdt_config.
+ESTADOS_OPERABLES_TODOS = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO", "DT_IMPULSO_GATILLO",
+                           "EE_GATILLO", "EE_ARMADO", "VALIDADO_POSTERIOR",
+                           "ENTRADA_PROFUNDA_ESPERANDO", "DT_IMPULSO_ESPERANDO",
+                           "ENGAÑO_EN_CURSO", "ESPERANDO_1618")
+ESTADOS_OPERABLES = tuple(e for e in ESTADOS_OPERABLES_TODOS if se_opera(e))
 
 
 def es_accionable(escaneo):

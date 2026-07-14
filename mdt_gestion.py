@@ -9,11 +9,43 @@ vez (la entrada del Engaño Extremo):
   - La caminata de gestión Secc 20 sobre velas — la usan el seguimiento de
     operaciones reales del bot y el simulador del backtest.
 """
-from mdt_config import RATIO_MINIMO, PARCIAL_R
+from mdt_config import FAMILIAS_OPERABLES, RATIO_MINIMO, PARCIAL_R
 
-# Gatillos EJECUTADOS = entrada a mercado real
-ESTADOS_EJECUTADOS = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO",
-                      "DT_IMPULSO_GATILLO", "EE_GATILLO")
+# A qué FAMILIA pertenece cada estado del motor (única tabla; el backtest la usó
+# para segmentar el año y de ahí salió la decisión de qué se opera).
+FAMILIA_DE_ESTADO = {
+    # Entrada Profunda (Secc 16) — el que más paga: +0.73R por operación
+    'P3_CORTA_GATILLO': 'ENTRADA PROFUNDA',
+    'ENTRADA_PROFUNDA_ESPERANDO': 'ENTRADA PROFUNDA',
+    'P3_CORTA_ROTA': 'ENTRADA PROFUNDA',
+    # Engaño Extremo (Secc 17) — rentable, pero llega tarde: +0.27R
+    'EE_GATILLO': 'ENGAÑO EXTREMO',
+    'EE_ARMADO': 'ENGAÑO EXTREMO',
+    'EE_EN_INDECISION': 'ENGAÑO EXTREMO',
+    'EE_DESCARTADO_25': 'ENGAÑO EXTREMO',
+    # Engaño clásico de 3 Pautas (Secc 9-13) — PIERDE dinero en el año: -0.17R
+    'GATILLO_ACTIVADO': 'ENGAÑO 3 PAUTAS',
+    'ENGAÑO_EN_CURSO': 'ENGAÑO 3 PAUTAS',
+    'ESPERANDO_1618': 'ENGAÑO 3 PAUTAS',
+    'VALIDADO_POSTERIOR': 'ENGAÑO 3 PAUTAS',
+    'ANULADO_POR_CARENCIA': 'ENGAÑO 3 PAUTAS',
+    # Doble Techo/Suelo con Impulso (Secc 18) — PIERDE dinero: -0.30R
+    'DT_IMPULSO_GATILLO': 'DOBLE TECHO/SUELO',
+    'DT_IMPULSO_ESPERANDO': 'DOBLE TECHO/SUELO',
+    'ROTO_POR_RETESTEO_DILATACION': 'DOBLE TECHO/SUELO',
+}
+
+
+def se_opera(estado):
+    """¿Esta familia de patrón se opera? (FAMILIAS_OPERABLES, mdt_config)."""
+    return FAMILIA_DE_ESTADO.get(estado, 'OTRA') in FAMILIAS_OPERABLES
+
+
+# Gatillos que entran a mercado. La lista COMPLETA la conoce el motor; lo que se
+# OPERA lo decide FAMILIAS_OPERABLES (decisión 14 jul con el año delante).
+ESTADOS_EJECUTADOS_TODOS = ("GATILLO_ACTIVADO", "P3_CORTA_GATILLO",
+                            "DT_IMPULSO_GATILLO", "EE_GATILLO")
+ESTADOS_EJECUTADOS = tuple(e for e in ESTADOS_EJECUTADOS_TODOS if se_opera(e))
 # Ejecutados que además MURIERON después (el backtest también los simula)
 ESTADOS_EJECUTADOS_MUERTOS = ("ROTO_POR_STOP_LOSS", "ROTO_POR_DOBLE_TOQUE",
                               "P3_CORTA_ROTA", "ROTO_POR_RETESTEO_DILATACION")

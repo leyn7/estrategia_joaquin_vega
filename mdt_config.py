@@ -53,6 +53,20 @@ GRADO_MIN_OPERABLE_PCT = 0.01
 # Video GESTIÓN EN BENEFICIO: "nunca entraremos a mercado a por operaciones que
 # al menos no nos den un 1 a 3" — el 1:4 del resumen viejo era una de las combos
 # (parcial 1:2 -> final 1:4), no el mínimo de entrada.
+# --- QUÉ PATRONES SE OPERAN (decisión 14 jul, con el backtest del año delante) ---
+# Un año de walk-forward (1.356 operaciones con ratio 1:3), segmentado por la
+# familia que el propio patrón se pone al nacer (no por cómo acabó):
+#   ENTRADA PROFUNDA (Secc 16): 695 ops | +507.8R | +0.73R por operación  <- el motor
+#   ENGAÑO EXTREMO   (Secc 17): 523 ops | +143.5R | +0.27R                <- rentable
+#   ENGAÑO 3 PAUTAS  (Secc 9-13): 85 ops | -14.2R | -0.17R    <- PIERDE dinero
+#   DOBLE TECHO/SUELO (Secc 18):  53 ops | -15.7R | -0.30R    <- PIERDE dinero
+# El bot es rentable A PESAR del engaño clásico de 3 Pautas, no gracias a él. Se
+# operan solo las dos familias del "engaño profundo" (nombre del usuario).
+# Para volver a operarlas todas: MDT_FAMILIAS="ENTRADA PROFUNDA,ENGAÑO EXTREMO,ENGAÑO 3 PAUTAS,DOBLE TECHO/SUELO"
+FAMILIAS_OPERABLES = tuple(
+    f.strip() for f in os.environ.get(
+        "MDT_FAMILIAS", "ENTRADA PROFUNDA,ENGAÑO EXTREMO").split(",") if f.strip())
+
 RATIO_MINIMO = 3.0   # Ratio Riesgo/Beneficio mínimo de ENTRADA (1:3)
 PARCIAL_R = 2.0      # Punto de descarga de presión (parcial mínimo 1:2, Secc 20)
 FINAL_R = 4.0        # Objetivo final = doble del parcial (perfil estándar 1:2 -> 1:4)

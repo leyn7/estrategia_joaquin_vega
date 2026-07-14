@@ -102,6 +102,20 @@ _AHORA_REAL = pd.Timestamp.now(tz='UTC').tz_localize(None)
 # ---------------------------------------------------------------------------
 # Extracción de entradas ejecutadas de un escaneo
 # ---------------------------------------------------------------------------
+def _familia(calidad, estado):
+    """A qué PATRÓN pertenece una entrada, gane o pierda. La etiqueta la pone el
+    propio patrón al nacer (detalles['calidad']); el estado final no sirve porque
+    los muertos comparten nombre (ROTO_POR_STOP_LOSS lo usan varios patrones)."""
+    c = str(calidad).upper()
+    if 'ENGAÑO EXTREMO' in c or str(estado).startswith('EE_'):
+        return 'ENGAÑO EXTREMO'
+    if 'ENTRADA PROFUNDA' in c or str(estado).startswith('P3_CORTA'):
+        return 'ENTRADA PROFUNDA'
+    if 'DOBLE TECHO' in c or str(estado).startswith('DT_'):
+        return 'DOBLE TECHO/SUELO'
+    return 'ENGAÑO 3 PAUTAS'
+
+
 def _entradas_de(res, escaneo):
     """Devuelve las operaciones EJECUTADAS de una cadena (entrada a mercado
     real): gatillos vivos o muertos después. La extracción vive en mdt_gestion
@@ -120,6 +134,7 @@ def _entradas_de(res, escaneo):
         d = r_.get('detalles', {})
         entradas.append({'hora': hora, 'entrada': entrada, 'sl': sl,
                          'estado': r_['estado'], 'patron': d.get('calidad', r_['estado']),
+                         'familia': _familia(d.get('calidad'), r_['estado']),
                          'llegada': d.get('calidad_llegada', '?'),
                          'nivel_engano': d.get('nivel_engano', '?')})
     return entradas
@@ -245,6 +260,15 @@ def main():
     # Reporte
     # -----------------------------------------------------------------------
     ops = list(trades.values())
+    # El libro de operaciones a disco: un año de walk-forward son horas de CPU;
+    # con el CSV se puede re-analizar (por familia, por mes, por llegada...) sin
+    # volver a correrlo.
+    if ops:
+        csv = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                           f"_ops_{symbol}_{args.desde}_{args.hasta}.csv")
+        pd.DataFrame(ops).to_csv(csv, index=False, encoding='utf-8')
+        print(f"\nLibro de operaciones -> {csv}")
+
     print("\n" + "=" * 100)
     print(f" OPERACIONES DETECTADAS: {len(ops)}")
     print("=" * 100)
@@ -290,29 +314,25 @@ def main():
     # ¿DÓNDE SE GANA Y DÓNDE SE QUEMAN CARTUCHOS? (pregunta del usuario, 13 jul:
     # "quemamos cartuchos en los otros engaños y muchas veces llegamos hasta el
     # último patrón, que es el Engaño Extremo — quiero enfocarme solo en ese").
-    # Aquí se ve con datos: cuánto aporta cada TIPO de patrón y cada NIVEL de la
-    # cadena (1º/2º/3º engaño), con y sin gestión.
-    print("\n--- POR TIPO DE PATRÓN (con ratio 1:3) ---")
-    PATRONES = {
-        'EE_GATILLO': 'Engaño EXTREMO (Secc 17, el último cartucho)',
-        'GATILLO_ACTIVADO': 'Engaño completo, 3 Pautas (Secc 9-13)',
-        'P3_CORTA_GATILLO': 'Entrada Profunda / Pauta 3 corta (Secc 16)',
-        'DT_IMPULSO_GATILLO': 'Doble Techo/Suelo con Impulso (Secc 18)',
-    }
-    vivos = {o['estado'] for o in con_ratio}
-    for est in sorted(vivos, key=lambda e: -sum(1 for o in con_ratio if o['estado'] == e)):
-        sub = [o for o in con_ratio if o['estado'] == est]
-        resumen(f"  {PATRONES.get(est, est)}", sub)
-        resumen(f"  {PATRONES.get(est, est)} [gestionado]", sub,
-                campo_r='g_r', campo_res='g_resultado')
+    #
+    # OJO: NO se puede segmentar por el ESTADO. Un Engaño Extremo que saltó el
+    # stop se registra como ROTO_POR_STOP_LOSS, igual que un engaño normal que
+    # saltó el stop: los PERDEDORES del EE quedarían escondidos en el saco del
+    # otro patrón y el EE parecería mejor de lo que es. Lo mismo con el nivel de
+    # la cadena (un EE nacido dentro del 1er engaño hereda "PRIMER ENGAÑO").
+    # La FAMILIA sí es honesta: la escribe el propio patrón en detalles['calidad']
+    # cuando nace, y no depende de si luego ganó o murió.
+    print("\n--- POR FAMILIA DE PATRÓN (etiqueta del propio patrón, gane o pierda) ---")
+    for fam in sorted({o['familia'] for o in con_ratio}):
+        sub = [o for o in con_ratio if o['familia'] == fam]
+        resumen(f"  {fam}", sub)
+        resumen(f"  {fam} [gestionado]", sub, campo_r='g_r', campo_res='g_resultado')
 
-    print("\n--- POR NIVEL DE LA CADENA (¿se queman cartuchos en los primeros?) ---")
-    for niv in ("PRIMER ENGAÑO", "SEGUNDO ENGAÑO", "TERCER ENGAÑO"):
-        sub = [o for o in con_ratio if o.get('nivel_engano') == niv]
-        resumen(f"  {niv}", sub)
-    otros = [o for o in con_ratio if o.get('nivel_engano', '?') not in
-             ("PRIMER ENGAÑO", "SEGUNDO ENGAÑO", "TERCER ENGAÑO")]
-    resumen("  ENGAÑO EXTREMO / fuera de la cadena", otros)
+    print("\n--- SOLO ENGAÑO EXTREMO (la pregunta del usuario) ---")
+    ee = [o for o in con_ratio if o['familia'] == 'ENGAÑO EXTREMO']
+    resto = [o for o in con_ratio if o['familia'] != 'ENGAÑO EXTREMO']
+    resumen("  Operando SOLO Engaños Extremos", ee, campo_r='g_r', campo_res='g_resultado')
+    resumen("  Operando TODO LO DEMÁS", resto, campo_r='g_r', campo_res='g_resultado')
 
 
 if __name__ == "__main__":
