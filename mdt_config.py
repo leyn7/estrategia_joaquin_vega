@@ -97,7 +97,12 @@ MIN_RIESGO_PCT = 0.005
 #   validada); esta capa solo la REPRODUCE con órdenes reales.
 MDT_MODO = os.environ.get('MDT_MODO', 'observacion').lower()
 BALANCE_VIRTUAL_INICIAL = float(os.environ.get('MDT_BALANCE_INICIAL', '1000'))
-RIESGO_CUENTA_PCT = float(os.environ.get('MDT_RIESGO_PCT', '0.01'))
+# Riesgo por operación = este % de la CUENTA NETA REAL, siempre (regla usuario 15
+# jul: "que se arriesgue el 0.1% de la cuenta neta siempre"). Se recalcula cada
+# operación sobre el balance real del momento: sube cuando la cuenta crece y baja
+# cuando encoge (compone). Con la cuenta en $4985, 0.1% = ~$5 por operación.
+RIESGO_CUENTA_PCT = float(os.environ.get('MDT_RIESGO_PCT', '0.001'))
+RIESGO_USD = float(os.environ.get('MDT_RIESGO_USD', '0'))  # 0 = usar el %, no monto fijo
 
 # --- Preferencia operativa (usuario, 4 jul 2026) ---
 # "Yo no trabajaría una zona macro, tardaría mucho en darme profit; prefiero

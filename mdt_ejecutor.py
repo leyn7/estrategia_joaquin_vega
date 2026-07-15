@@ -39,7 +39,7 @@ import urllib.parse
 
 import requests
 
-from mdt_config import RIESGO_CUENTA_PCT
+from mdt_config import RIESGO_CUENTA_PCT, RIESGO_USD
 
 log = logging.getLogger('mdt.ejecutor')
 
@@ -158,7 +158,9 @@ def calcular_cantidad(symbol, entrada, sl, balance_virtual):
     riesgo_precio = abs(entrada - sl)
     if riesgo_precio <= 0:
         raise ErrorEjecucion("Riesgo en precio es cero: no se puede dimensionar.")
-    riesgo_dolares = balance_virtual * RIESGO_CUENTA_PCT
+    # Monto fijo en dólares si está configurado (regla usuario: "riesgo $1"), si no
+    # el % del balance. El fijo no cambia con el balance.
+    riesgo_dolares = RIESGO_USD if RIESGO_USD > 0 else balance_virtual * RIESGO_CUENTA_PCT
     cantidad = riesgo_dolares / riesgo_precio
     info = info_simbolo(symbol)
     cantidad = _redondear(cantidad, info['qty_step'], info['qty_precision'])
@@ -286,6 +288,23 @@ def cancelar_ordenes(symbol, algo_ids):
         except ErrorEjecucion:
             # Lo normal: ya se disparó o ya no existe. No es un fallo.
             log.debug("testnet: el algo %s de %s ya no estaba abierto", aid, symbol)
+
+
+def algos_abiertos(symbol, algo_ids):
+    """De una lista de algoIds, cuáles siguen ABIERTOS en el exchange. El que
+    desaparece es que se DISPARÓ (cerró su cantidad de la posición). Esta es la
+    verdad del cierre: el exchange, no la lectura de velas del bot."""
+    if not algo_ids:
+        return set()
+    abiertos = _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol})
+    vivos = {str(a.get('algoId')) for a in abiertos}
+    return {a for a in algo_ids if str(a) in vivos}
+
+
+def balance_real(symbol=None):
+    """Balance USDT real del testnet (lo que de verdad tiene la cuenta demo).
+    El bot usa ESTE para dimensionar y reportar, no un número inventado."""
+    return balance_disponible_testnet()
 
 
 def pnl_realizado(symbol, desde_ms, hasta_ms=None):

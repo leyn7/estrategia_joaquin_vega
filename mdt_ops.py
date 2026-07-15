@@ -160,10 +160,18 @@ def _testnet_parcial(sym, k, op, s, chat_id):
         mdt_ejecutor.cerrar_parcial(sym, op['lado'], media, t['position_side'])
         mdt_ejecutor.cancelar_ordenes(sym, [a for a in (t.get('algo_sl'), t.get('algo_tp')) if a])
         t['cantidad_viva'] = media
-        t['algo_sl'] = mdt_ejecutor.mover_stop(
-            sym, op['lado'], media, None, op['entrada'], t['position_side'])
-        t['algo_tp'] = None
-        t['algos'] = [t['algo_sl']]
+        # La mitad viva conserva SL (ahora en breakeven) Y TP: el exchange la
+        # cerrará por uno de los dos (la reconciliación lo detecta).
+        cierre = 'SELL' if op['lado'] == 'BUY' else 'BUY'
+        info = mdt_ejecutor.info_simbolo(sym)
+        be = mdt_ejecutor._redondear(op['entrada'], info['price_step'], info['price_precision'])
+        t['algo_sl'] = mdt_ejecutor._algo_stop(sym, cierre, t['position_side'],
+                                               'STOP_MARKET', be, media)
+        tp_obj = max(op['tp_zona']) if op['lado'] == 'SELL' else min(op['tp_zona'])
+        tp_r = mdt_ejecutor._redondear(tp_obj, info['price_step'], info['price_precision'])
+        t['algo_tp'] = mdt_ejecutor._algo_stop(sym, cierre, t['position_side'],
+                                               'TAKE_PROFIT_MARKET', tp_r, media)
+        t['algos'] = [t['algo_sl'], t['algo_tp']]
     except mdt_ejecutor.StopDispararia:
         # El precio ya volvió al breakeven antes de poder mover el stop: se cierra
         # a mercado la mitad viva (el breakeven se alcanzó de hecho).
@@ -182,53 +190,55 @@ def _testnet_parcial(sym, k, op, s, chat_id):
                                  f"SL movido a breakeven ({op['entrada']:.4f})")
 
 
-def _testnet_cerrar(sym, k, op, s, cuenta, chat_id):
-    """Cierre final (SL/BE/TP): deja la posición plana, cancela SOLO las órdenes
-    de ESTA operación, y liquida el balance con el P&L REAL del exchange.
+def _testnet_reconciliar(sym, k, op, cuenta, chat_id):
+    """El cierre lo decide el EXCHANGE, no la lectura de velas (corrección 15 jul).
 
-    Dos correcciones de la auditoría (14 jul):
-      - Antes cancelaba TODAS las órdenes del símbolo: se llevaba por delante los
-        SL/TP de las otras operaciones vivas, dejándolas a pelo.
-      - Antes liquidaba con la R teórica (balance × riesgo% × R). Ahora suma los
-        realizedPnl menos comisiones de SUS trades: ahí sí se ven el deslizamiento
-        y las comisiones, que es justo lo que el testnet debe enseñar.
-    """
+    El bot pone SL y TP nativos con la cantidad de esta señal; Binance los ejecuta
+    solo. Aquí se consulta cuál se disparó: si el SL desapareció, cerró por stop;
+    si el TP desapareció, cerró por objetivo. El hermano que quede se cancela y se
+    liquida el P&L real. El bot NUNCA cierra a mercado por su cuenta — eso
+    duplicaba el cierre sobre la posición neta y dejaba restos sin stop.
+
+    Devuelve True si la operación cerró en el exchange."""
     import mdt_ejecutor
     t = op.get('testnet')
-    if t is None:            # señal que no llegó al exchange (posición ocupada)
-        return
+    if t is None:
+        return False
+    algo_sl, algo_tp = t.get('algo_sl'), t.get('algo_tp')
+    activos = [a for a in (algo_sl, algo_tp) if a]
+    if not activos:
+        return False
+    vivos = mdt_ejecutor.algos_abiertos(sym, activos)
+    if all(str(a) in {str(x) for x in vivos} for a in activos):
+        return False   # ambos stops siguen puestos: la operación sigue viva
+
+    # Uno se disparó -> la operación cerró. ¿Cuál?
+    sl_disparo = algo_sl and str(algo_sl) not in {str(x) for x in vivos}
+    fase = 'SL' if sl_disparo else 'TP'
+    mdt_ejecutor.cancelar_ordenes(sym, [a for a in activos if str(a) in {str(x) for x in vivos}])
+
+    import time as _t
     real = None
     try:
-        # La gestión da la operación por cerrada según las velas; si el SL/TP del
-        # exchange no ha saltado aún, se cierra a mercado para no dejar cola.
-        viva = t.get('cantidad_viva', t['cantidad'])
-        if s['fase'] in ('BE',) or s['fase'] not in ('SL', 'TP'):
-            mdt_ejecutor.cerrar_a_mercado(sym, op['lado'], viva, t['position_side'])
-        mdt_ejecutor.cancelar_ordenes(sym, t.get('algos'))
-        import time as _t
         real = mdt_ejecutor.pnl_realizado(sym, t['inicio_ms'], int(_t.time() * 1000))
-    except Exception:  # noqa: BLE001 — la cuenta igual se liquida (con la teórica)
-        log.exception("testnet: fallo cerrando %s", k)
+    except Exception:  # noqa: BLE001
+        log.exception("testnet: P&L de %s", k)
 
-    antes = cuenta['balance']
-    if real is not None:
-        pnl = real['pnl']
-        detalle = (f"  real: {real['bruto']:+.2f} bruto − {real['comision']:.2f} "
-                   f"comisión = {pnl:+.2f} USD")
-    else:
-        pnl = antes * RIESGO_CUENTA_PCT * s['r']    # respaldo si el exchange no responde
-        detalle = f"  (sin datos del exchange: estimado teórico {pnl:+.2f} USD)"
-    cuenta['balance'] = antes + pnl
+    pnl = real['pnl'] if real else 0.0
+    op['fase'] = 'TP' if fase == 'TP' else 'SL'
+    op['r_final'] = pnl
+    cuenta['balance'] = mdt_ejecutor.balance_real(sym)   # el balance REAL manda
     cuenta.setdefault('historial', []).append({
-        'op': k, 'patron': op['patron'], 'fase': s['fase'], 'r': round(s['r'], 3),
-        'pnl': round(pnl, 2), 'balance': round(cuenta['balance'], 2),
-        'hora': op['hora_gatillo'], 'real': real is not None,
-    })
+        'op': k, 'patron': op['patron'], 'fase': fase, 'pnl': round(pnl, 2),
+        'balance': round(cuenta['balance'], 2), 'hora': op['hora_gatillo'],
+        'real': real is not None})
+    icono = '🏁' if fase == 'TP' else '☠️'
+    detalle = (f"real {real['bruto']:+.2f} − {real['comision']:.2f} comisión = {pnl:+.2f} USD"
+               if real else "sin datos del exchange")
     mdt_telegram.enviar(chat_id,
-        f"🧪 {sym} | TESTNET: {k} cerrada por {s['fase']} ({s['r']:+.2f}R teórica)\n"
-        f"{detalle}\n"
-        f"  balance virtual ${cuenta['balance']:.2f} "
-        f"(arrancó en ${BALANCE_VIRTUAL_INICIAL:.2f})")
+        f"{icono} {sym} | TESTNET: {k} cerró por {fase} en el exchange\n"
+        f"  {detalle}\n  balance real de la cuenta: ${cuenta['balance']:.2f}")
+    return True
 
 
 def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
@@ -244,6 +254,14 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
     ops = mem.setdefault('operaciones', {})
     eventos = []
     testnet = MDT_MODO == 'testnet' and cuenta is not None
+    if testnet:
+        # El balance que manda es el REAL de la cuenta demo (regla usuario 15 jul:
+        # "pon lo real que está ahora"), no un número inventado por dentro.
+        try:
+            import mdt_ejecutor
+            cuenta['balance'] = mdt_ejecutor.balance_real(sym)
+        except Exception:  # noqa: BLE001 — si el exchange no responde, se sigue con lo último
+            log.exception("testnet: no se pudo leer el balance real")
 
     # 1) Registrar gatillos ejecutados nuevos (dedup por lado|ancla|patrón|entrada)
     for e in resultado['escaneos']:
@@ -265,6 +283,14 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
     for k, op in list(ops.items()):
         if op.get('fase') in FASES_CERRADAS:
             continue
+        # En testnet, el cierre por SL/TP lo decide el EXCHANGE (reconciliación),
+        # no la lectura de velas: así no se cierra dos veces la posición neta.
+        if testnet and op.get('testnet'):
+            try:
+                if _testnet_reconciliar(sym, k, op, cuenta, chat_id):
+                    continue   # cerró en el exchange
+            except Exception:  # noqa: BLE001
+                log.exception("testnet: reconciliación de %s", k)
         try:
             s = seguir_operacion(sym, op)
         except Exception:  # noqa: BLE001 — una operación rota no tumba el bucle
@@ -283,11 +309,11 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
             if previa is None and s['fase'] == 'ABIERTA':
                 titulo = 'OPERACIÓN REGISTRADA (gatillo ejecutado)'
             eventos.append(f"{icono} {sym} | {titulo}\n{texto_op_real(op, s)}")
-            if testnet:
-                if s['fase'] == 'PARCIAL' and previa != 'PARCIAL':
-                    _testnet_parcial(sym, k, op, s, chat_id)
-                elif s['fase'] in FASES_CERRADAS:
-                    _testnet_cerrar(sym, k, op, s, cuenta, chat_id)
+            # El parcial (1:2) SÍ es una decisión del bot (por velas): cierra media
+            # y mueve el SL a breakeven. El cierre final NO — lo hace el exchange
+            # (reconciliación arriba). Por eso aquí solo se maneja el parcial.
+            if testnet and s['fase'] == 'PARCIAL' and previa != 'PARCIAL':
+                _testnet_parcial(sym, k, op, s, chat_id)
         op['fase'] = s['fase']
         if s['fase'] in FASES_CERRADAS:
             op['r_final'] = round(s['r'], 2)

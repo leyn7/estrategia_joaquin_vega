@@ -68,19 +68,27 @@ def _cmd_lista(estado):
 
 def _cmd_cuenta(estado):
     c = estado.get('cuenta_testnet') or {}
-    balance = c.get('balance', BALANCE_VIRTUAL_INICIAL)
+    inicial = c.get('inicial_real', 5000.0)   # la cuenta demo arrancó con $5000
+    balance = c.get('balance', inicial)
+    # El balance REAL de Binance manda (regla usuario 15 jul: "pon lo real")
+    if MDT_MODO == 'testnet':
+        try:
+            import mdt_ejecutor
+            balance = mdt_ejecutor.balance_real()
+        except Exception:  # noqa: BLE001
+            pass
     historial = c.get('historial') or []
-    pnl = balance - BALANCE_VIRTUAL_INICIAL
-    L = [f"🧪 Cuenta virtual (modo: {MDT_MODO})",
-         f"  balance: ${balance:,.2f} (arrancó en ${BALANCE_VIRTUAL_INICIAL:,.2f}, "
-         f"{pnl:+,.2f} / {pnl / BALANCE_VIRTUAL_INICIAL:+.1%})",
-         f"  riesgo por operación: {RIESGO_CUENTA_PCT:.1%} del balance actual",
-         f"  operaciones cerradas: {len(historial)}"]
+    pnl = balance - inicial
+    L = [f"🧪 Cuenta demo Binance (modo: {MDT_MODO})",
+         f"  balance REAL: ${balance:,.2f} (arrancó en ${inicial:,.2f}, "
+         f"{pnl:+,.2f} / {pnl / inicial:+.1%})",
+         f"  riesgo por operación: {RIESGO_CUENTA_PCT:.1%} = ${balance * RIESGO_CUENTA_PCT:.2f}",
+         f"  operaciones en historial: {len(historial)}"]
     if MDT_MODO != 'testnet':
         L.append("  (MDT_MODO no es 'testnet': no se están colocando órdenes reales)")
     for h in historial[-8:]:
-        L.append(f"  {h['hora'][:16]} {h['patron']} {h['fase']} ({h['r']:+.2f}R) "
-                 f"{h['pnl']:+.2f} -> ${h['balance']:,.2f}")
+        L.append(f"  {str(h.get('hora',''))[:16]} {h.get('patron','')} {h.get('fase','')} "
+                 f"{h.get('pnl',0):+.2f} -> ${h.get('balance',0):,.2f}")
     return '\n'.join(L)
 
 
