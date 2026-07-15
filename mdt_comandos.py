@@ -211,20 +211,41 @@ def _cmd_rsi3m(estado, partes):
         return f"Error aplicando rsi_3m: {e}"
 
 
-def _cmd_borra_ancla(estado, partes):
+def _borrar_de(estado, coleccion, etiqueta, precio_txt):
+    """Borra un ítem (ancla / rsi3m) de forma TOLERANTE: no exige el precio exacto.
+    El bot guarda el ancla en la vela más cercana (566 -> 565.91), así que pedir el
+    número redondo no coincidía y no borraba nada (bug 15 jul). Ahora:
+      - sin precio y hay uno solo -> lo borra.
+      - con precio -> el MÁS CERCANO (hasta 2 puntos); si hay varios candidatos
+        cercanos, los lista para que el operador elija con el número guardado."""
+    items = estado.setdefault(coleccion, {})
+    if not items:
+        return f"No hay {etiqueta} en seguimiento."
+    if precio_txt is None:
+        if len(items) == 1:
+            k = next(iter(items))
+            anc = items[k]['ancla']
+            items.pop(k)
+            guardar_estado(estado)
+            return f"🗑 {etiqueta} {anc:.2f} eliminada."
+        listado = ', '.join(f"{v['ancla']:.2f}" for v in items.values())
+        return f"Hay varias {etiqueta}: {listado}. Dime cuál: borra {etiqueta} PRECIO"
     try:
-        p = float(partes[2].replace(',', '.'))
+        p = float(precio_txt.replace(',', '.'))
     except ValueError:
-        return "Uso: borra ancla 560.58"
-    anclas = estado.setdefault('anclas', {})
-    fuera = [k for k in anclas if abs(anclas[k]['ancla'] - p) < 0.01]
-    for k in fuera:
-        anclas.pop(k)
+        return f"Uso: borra {etiqueta} 560.58"
+    cercanos = sorted(items.items(), key=lambda kv: abs(kv[1]['ancla'] - p))
+    k, v = cercanos[0]
+    if abs(v['ancla'] - p) > 2.0:
+        listado = ', '.join(f"{x['ancla']:.2f}" for x in items.values())
+        return f"No encontré {etiqueta} cerca de {p:.2f}. En seguimiento: {listado}"
+    items.pop(k)
     guardar_estado(estado)
-    return f"🗑 Ancla {p:.2f} eliminada." if fuera else f"No vigilaba el ancla {p:.2f}."
+    exacto = "" if abs(v['ancla'] - p) < 0.01 else f" (la más cercana a {p:.2f})"
+    return f"🗑 {etiqueta} {v['ancla']:.2f} eliminada{exacto}."
 
 
-def atender_comando(estado, texto):
+def atender_comando(estado, texto):  # noqa: C901
     """Ejecuta un comando y devuelve la respuesta (texto) para el chat."""
     partes = texto.split()
     if not partes:
@@ -271,19 +292,10 @@ def atender_comando(estado, texto):
                 "  o: aplica entradas rsi3m 560.58\n"
                 "Aplica la rsi_3m PURA (largos y cortos, sin filtros, TP 1:10) "
                 "desde ese mínimo/máximo, y te avisa de cada señal nueva.")
-    if cmd == 'rsi3m_off' or (cmd == 'borra' and len(partes) > 2
+    if cmd == 'rsi3m_off' or (cmd == 'borra' and len(partes) > 1
                               and partes[1].lower() in ('rsi3m', 'rsi_3m')):
-        r = estado.setdefault('rsi3m', {})
-        try:
-            p = float(partes[2].replace(',', '.'))
-        except (ValueError, IndexError):
-            return "Uso: borra rsi3m 560.58"
-        fuera = [k for k in r if abs(r[k]['ancla'] - p) < 0.01]
-        for k in fuera:
-            r.pop(k)
-        guardar_estado(estado)
-        return (f"🗑 rsi_3m del ancla {p:.2f} desactivada." if fuera
-                else f"No estaba aplicando rsi_3m en {p:.2f}.")
+        precio = partes[2] if len(partes) > 2 else None
+        return _borrar_de(estado, 'rsi3m', 'rsi3m', precio)
     if cmd == 'anclas':
         anclas = estado.get('anclas') or {}
         if not anclas:
@@ -293,8 +305,9 @@ def atender_comando(estado, texto):
             sentido = 'alcista' if v['direction'] == 'BULLISH' else 'bajista'
             lineas.append(f"  {v['symbol']} {v['ancla']:.2f} ({sentido})")
         return '\n'.join(lineas)
-    if cmd == 'borra' and len(partes) > 2 and partes[1].lower() == 'ancla':
-        return _cmd_borra_ancla(estado, partes)
+    if cmd == 'borra' and len(partes) > 1 and partes[1].lower() == 'ancla':
+        precio = partes[2] if len(partes) > 2 else None
+        return _borrar_de(estado, 'anclas', 'ancla', precio)
 
     if cmd in ('tramos', 'tramo'):
         sym = arg or SYMBOL
