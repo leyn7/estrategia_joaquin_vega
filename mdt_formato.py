@@ -6,6 +6,7 @@ convertir los resultados del escáner en texto legible para el operador.
 """
 from mdt_config import MIN_RIESGO_PCT, RATIO_MINIMO
 from mdt_data import to_cot
+from mdt_math import banda_de
 from mdt_operacion import ESTADOS_OPERABLES
 
 
@@ -150,7 +151,7 @@ def texto_zonas_ancla(escaneos, precio):
         # La banda (Alta/Media/Baja) y, sobre todo, EL ANCLA DE SU CICLO — el
         # punto de control que crea la zona (regla usuario 13 jul: "necesito las
         # anclas de los ciclos, no la principal repetida en todas").
-        banda = e['zona'].rsplit('(', 1)[-1].rstrip(')') if '(' in e['zona'] else e['zona']
+        banda = banda_de(e['zona'])
         L.append(f"\n[{accion}] {banda} {zmax:.2f}-{zmin:.2f} {donde}{ctx}")
         if e.get('ancla') is not None:
             ciclo = ""

@@ -50,6 +50,18 @@ ESTADOS_EJECUTADOS = tuple(e for e in ESTADOS_EJECUTADOS_TODOS if se_opera(e))
 ESTADOS_EJECUTADOS_MUERTOS = ("ROTO_POR_STOP_LOSS", "ROTO_POR_DOBLE_TOQUE",
                               "P3_CORTA_ROTA", "ROTO_POR_RETESTEO_DILATACION")
 
+# Fases terminales de una operación real (vivía en mdt_ops; aquí no crea ciclos
+# de import y la usan ops, testnet y los textos). CANCELADA = ancla muerta
+# (candado Regla 3, conectado 16 jul).
+FASES_CERRADAS = ('SL', 'BE', 'TP', 'CANCELADA')
+
+
+def tp_cercano(lado, tp_zona):
+    """El TP operativo: el borde CERCANO de la zona objetivo (conservador, Secc 7).
+    Estaba escrito 6 veces por el código (auditoría 16 jul); si un día cambia el
+    criterio, se cambia aquí y en ningún otro sitio."""
+    return max(tp_zona) if lado == 'SELL' else min(tp_zona)
+
 
 def entrada_de_resultado(res, lado, rango):
     """Extrae (entrada, sl, hora_gatillo) de un resultado de patrón, o None.

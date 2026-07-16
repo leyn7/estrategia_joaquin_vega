@@ -1,3 +1,4 @@
+from mdt_config import NIVEL_618
 def find_micro_fractals(df):
     """Fractales 2+2 estrictos (Sección 2): extremo con 2 velas cerradas a cada lado.
     Devuelve (picos, valles) como índices — candidatos a P1 del escáner de patrones."""
@@ -101,7 +102,7 @@ def extraer_puntos_control(df, start_idx, end_idx, direction="BULLISH"):
                 continue
             altura = p['peak'] - p['trough']
             subida = p['peak'] - o_ret
-            if subida > 0 and altura >= 0.618 * subida:
+            if subida > 0 and altura >= NIVEL_618 * subida:
                 p['es_reset'] = True
                 resets.append({'trough': real(p['trough']), 'trough_idx': p['trough_idx'], 'idx': i})
                 for cp in validados:

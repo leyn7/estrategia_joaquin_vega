@@ -13,7 +13,7 @@ Reglas del operador integradas aquí:
   - El último ciclo del mapa se audita sin privilegios contra los anteriores
     (7 jul): si sus zonas tejen contra la estructura madre, el ancla no sirve.
 """
-from mdt_config import ZONA_MAX_OPERABLE_PCT
+from mdt_config import NIVEL_382, ZONA_MAX_OPERABLE_PCT
 from mdt_math import apply_concurrency, calc_zones
 
 
@@ -131,7 +131,7 @@ def _registrar_activado(c, ev, z, direction, buys, sells, alerts, etiqueta, deta
     media_medida_nueva = calc_zones(ev['origen_vigente'], fin_tp, direction)['MEDIA']
 
     if direction == "BULLISH":
-        anul = {"BAJA": origen - imp * 0.382, "MEDIA": origen, "ALTA": fin + imp * 0.382}
+        anul = {"BAJA": origen - imp * NIVEL_382, "MEDIA": origen, "ALTA": fin + imp * NIVEL_382}
         buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso,
                      "nivel_anulacion": anul["BAJA"], "tp_zona": z['ALTA'], **extra})
         if not ev['media_muerta']:
@@ -140,7 +140,7 @@ def _registrar_activado(c, ev, z, direction, buys, sells, alerts, etiqueta, deta
         sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso,
                       "nivel_anulacion": anul["ALTA"], "tp_zona": media_medida_nueva, **extra})
     else:
-        anul = {"ALTA": origen + imp * 0.382, "MEDIA": origen, "BAJA": fin - imp * 0.382}
+        anul = {"ALTA": origen + imp * NIVEL_382, "MEDIA": origen, "BAJA": fin - imp * NIVEL_382}
         buys.append({"name": f"{nombre} (Baja)", "z": z['BAJA'], "peso": peso,
                      "nivel_anulacion": anul["BAJA"], "tp_zona": media_medida_nueva, **extra})
         sells.append({"name": f"{nombre} (Alta)", "z": z['ALTA'], "peso": peso,

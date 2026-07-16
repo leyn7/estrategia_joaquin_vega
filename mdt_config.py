@@ -69,14 +69,16 @@ FAMILIAS_OPERABLES = tuple(
 
 RATIO_MINIMO = 3.0   # Ratio Riesgo/Beneficio mínimo de ENTRADA (1:3)
 PARCIAL_R = 2.0      # Punto de descarga de presión (parcial mínimo 1:2, Secc 20)
-FINAL_R = 4.0        # Objetivo final = doble del parcial (perfil estándar 1:2 -> 1:4)
 MAX_OPS_DIA = 4      # Límite operativo diario (capa de ejecución, aún sin bucle en vivo)
 
-# Comisión de ida y vuelta (taker a la entrada + taker a la salida, 0.05% c/u).
+# Comisión taker POR LADO (entrada o salida a mercado). Única fuente: antes
+# mdt_rsi3m definía su propio 0.0005 y aquí vivía el 0.001 de ida y vuelta —
+# el día que Binance cambie tarifas, divergían en silencio (auditoría 16 jul).
 # No es un detalle: SUMA a lo que pierdes en el stop y RESTA de lo que ganas en
 # el TP, así que un 1:3 bruto puede no ser un 1:3 real (regla usuario 14 jul:
 # "que cuando sea 1:3 verdaderamente sea 1:3, no que las comisiones nos resten").
-COMISION_IDA_VUELTA = 0.001
+COMISION_LADO = 0.0005
+COMISION_IDA_VUELTA = 2 * COMISION_LADO
 
 # SL más cerca que esto (% de la entrada): las comisiones se comen el riesgo antes
 # de que el trade respire. Lo que pesa NO es cuántos dólares arriesgues, sino lo

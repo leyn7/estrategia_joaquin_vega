@@ -8,7 +8,7 @@ operaciones reales y el backtest); aquí se le añade el objetivo y el veredicto
 """
 from mdt_config import (COMISION_IDA_VUELTA, MIN_RIESGO_PCT, RATIO_MINIMO,
                         ZONA_MAX_OPERABLE_PCT)
-from mdt_gestion import entrada_de_resultado, se_opera
+from mdt_gestion import entrada_de_resultado, se_opera, tp_cercano
 
 # Estados que representan un setup accionable o vivo. La lista COMPLETA la conoce
 # el motor (el mapa sigue viendo todos los patrones); lo que se OPERA lo decide
@@ -72,7 +72,7 @@ def construir_operacion(escaneo, prioritaria):
     tp_zona = escaneo.get('tp_zona')
     if entrada is None or sl is None or tp_zona is None:
         return None
-    tp = max(tp_zona) if lado == "SELL" else min(tp_zona)  # borde cercano (conservador)
+    tp = tp_cercano(lado, tp_zona)   # borde cercano (conservador, mdt_gestion)
     riesgo = abs(sl - entrada)
     if riesgo <= 0:
         return None

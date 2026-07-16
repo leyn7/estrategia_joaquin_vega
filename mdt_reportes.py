@@ -7,6 +7,7 @@ Dos vistas, ambas nacidas de reglas suyas:
   - Por ANCLA (13 jul): el tramo que él marca a mano desde Telegram.
 """
 from mdt_data import to_cot
+from mdt_math import banda_de
 from mdt_zonas import zonas_finales_tramo
 
 
@@ -22,10 +23,6 @@ def _bandas_por_ancla(zonas):
         if z.get('ancla') is not None:
             por_ancla.setdefault(round(z['ancla'], 2), []).append((lado, z))
     return por_ancla
-
-
-def _banda(z):
-    return z['name'].rsplit('(', 1)[-1].rstrip(')') if '(' in z['name'] else '?'
 
 
 def reporte_ancla(a):
@@ -87,7 +84,7 @@ def reporte_ancla(a):
                 d = (zmin - precio) if precio < zmin else (precio - zmax)
                 fuera.append((d, accion, z))
                 marca = f"  (a {d:.2f} | {d / precio:.1%})"
-            L.append(f"      [{accion}] {_banda(z)}: {zmax:.2f}-{zmin:.2f}{marca}")
+            L.append(f"      [{accion}] {banda_de(z['name'])}: {zmax:.2f}-{zmin:.2f}{marca}")
 
     if not hay:
         L.append("  (ningún ciclo conserva zonas operables)")
@@ -167,7 +164,7 @@ def _reporte_de_un_tramo(t, precio):
                     dist = (zmin - precio) if precio < zmin else (precio - zmax)
                     fuera.append((dist, accion, z))
                     marca = f"  (a {dist:.2f} | {dist / precio:.1%})"
-                L.append(f"       [{accion}] {_banda(z)}: {zmax:.2f} a {zmin:.2f}{marca}")
+                L.append(f"       [{accion}] {banda_de(z['name'])}: {zmax:.2f} a {zmin:.2f}{marca}")
     else:
         L.append("  Ningún ciclo del tramo conserva zonas operables ahora.")
 

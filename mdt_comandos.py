@@ -11,7 +11,7 @@ import pandas as pd
 import requests
 
 import mdt_telegram
-from mdt_config import BALANCE_VIRTUAL_INICIAL, MDT_MODO, RIESGO_CUENTA_PCT, SYMBOL, TZ_LOCAL
+from mdt_config import MDT_MODO, RIESGO_CUENTA_PCT, SYMBOL, TZ_LOCAL
 from mdt_escaner import escanear_ancla, escanear_completo
 from mdt_estructura import TF_BUSQUEDA
 from mdt_estado import guardar_estado
@@ -73,8 +73,8 @@ def _cmd_cuenta(estado):
     # El balance REAL de Binance manda (regla usuario 15 jul: "pon lo real")
     if MDT_MODO == 'testnet':
         try:
-            import mdt_ejecutor
-            balance = mdt_ejecutor.balance_real()
+            import mdt_cartera
+            balance = mdt_cartera.balance_real()
         except Exception:  # noqa: BLE001
             pass
     historial = c.get('historial') or []

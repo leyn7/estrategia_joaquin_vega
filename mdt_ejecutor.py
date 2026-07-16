@@ -1,91 +1,51 @@
 # -*- coding: utf-8 -*-
-"""Ejecución REAL de órdenes contra Binance Futures TESTNET (regla usuario 14
-jul: "que operen como si fueran reales, sin meter dinero real").
+"""Órdenes REALES contra Binance Futures TESTNET (regla usuario 14 jul: "que
+operen como si fueran reales, sin meter dinero real").
 
-Solo se usa cuando MDT_MODO=testnet (mdt_config.py); en 'observacion' (default)
-nada de este módulo se llama y el bot se comporta exactamente igual que antes.
+Solo se usa cuando MDT_MODO=testnet; en 'observacion' (default) nada de este
+módulo se llama. Este módulo no decide estrategia: REPRODUCE las decisiones de
+mdt_gestion con órdenes reales y devuelve lo que REALMENTE pasó.
 
-Diseño (a propósito conservador): la decisión de CUÁNDO entrar/salir la sigue
-dando mdt_gestion.gestionar() sobre velas reales — la misma que ya se validó
-toda la sesión. Este módulo no decide nada de estrategia: solo REPRODUCE esa
-decisión con órdenes reales en el testnet (firma, redondeo, rate limits, rechazos
-del exchange) y devuelve lo que REALMENTE pasó (precio de llenado, P&L, comisión).
+Capas (auditoría 16 jul — antes todo vivía aquí, 488 líneas):
+  mdt_binance_api.py  firma + request + info del símbolo + redondeo
+  mdt_ejecutor.py     <- este: las órdenes (entrada, stops algo, parcial)
+  mdt_cartera.py      vista de conjunto (posiciones, cobertura, red, P&L)
 
-TRES COSAS QUE HAY QUE ENTENDER (auditoría 14 jul — sin ellas la simulación miente):
+TRES COSAS QUE HAY QUE ENTENDER (auditoría 14 jul):
 
-1. MODO HEDGE OBLIGATORIO. En one-way Binance tiene UNA sola posición neta por
-   símbolo: el bot abre varias operaciones a la vez en BNBUSDT (compras Y ventas
-   concurrentes de zonas distintas), y una venta a mercado estando largo NO abre
-   un corto — REDUCE el largo. Con hedge (dualSidePosition) conviven LONG y SHORT
-   y cada orden dice a qué lado pertenece (positionSide). En hedge, las órdenes de
-   cierre NO llevan reduceOnly (Binance las rechaza): basta el positionSide.
+1. MODO HEDGE OBLIGATORIO. En one-way Binance tiene UNA posición neta por
+   símbolo: una venta a mercado estando largo NO abre un corto — REDUCE el largo.
+   Con hedge conviven LONG y SHORT y cada orden dice su positionSide. En hedge,
+   las órdenes de cierre NO llevan reduceOnly (Binance las rechaza).
 
-2. LAS ÓRDENES SE CANCELAN UNA A UNA. `cancelar_todas(symbol)` borraba el SL y el
-   TP de las OTRAS operaciones vivas del mismo símbolo — las dejaba a pelo.
+2. LAS CONDICIONALES VAN A LA ALGO API. Desde el 9-dic-2025 Binance migró
+   STOP_MARKET/TAKE_PROFIT a /fapi/v1/algoOrder (el endpoint clásico las rechaza
+   con -4120). triggerPrice en vez de stopPrice; se cancelan por algoId.
 
-3. EL P&L SALE DE LOS LLENADOS REALES (userTrades: realizedPnl - commission), no
-   de la R teórica. Si no, el deslizamiento y las comisiones — justo lo que se
-   quiere medir con el testnet — quedan invisibles.
+3. LAS ÓRDENES SE CANCELAN UNA A UNA (cancelar_ordenes): cancelarlo todo borraba
+   los SL/TP de las demás operaciones vivas del mismo símbolo.
 
-Sizing: arriesga RIESGO_CUENTA_PCT del balance virtual ACTUAL (compone) en cada
-gatillo nuevo — cantidad = (balance * riesgo%) / distancia_al_SL.
+Sizing: RIESGO_USD fijo si está configurado; si no, RIESGO_CUENTA_PCT del
+patrimonio neto (la "cuenta neta" del operador, 15 jul).
 """
-import hashlib
-import hmac
 import logging
-import os
 import time
-import urllib.parse
 
-import requests
-
+from mdt_binance_api import (BASE_URL, ErrorEjecucion, info_simbolo,  # noqa: F401
+                             redondear, request)
 from mdt_config import RIESGO_CUENTA_PCT, RIESGO_USD
 
 log = logging.getLogger('mdt.ejecutor')
 
-BASE_URL = "https://testnet.binancefuture.com"
-TIMEOUT = 10
-
-API_KEY = os.environ.get('MDT_BINANCE_TESTNET_KEY', '')
-API_SECRET = os.environ.get('MDT_BINANCE_TESTNET_SECRET', '').encode()
-
-_info_simbolo_cache = {}
 _hedge_ok = False          # se comprueba una vez por proceso
 
 
-class ErrorEjecucion(Exception):
-    """Cualquier fallo hablando con el testnet (red, firma, orden rechazada)."""
-
-
-def _firmar(params):
-    query = urllib.parse.urlencode(params)
-    firma = hmac.new(API_SECRET, query.encode(), hashlib.sha256).hexdigest()
-    return f"{query}&signature={firma}"
-
-
-def _request(method, path, params=None, firmado=True):
-    if not API_KEY or not API_SECRET:
-        raise ErrorEjecucion("MDT_BINANCE_TESTNET_KEY/SECRET vacíos: no se puede operar en testnet.")
-    params = dict(params or {})
-    headers = {'X-MBX-APIKEY': API_KEY}
-    try:
-        if firmado:
-            params['timestamp'] = int(time.time() * 1000)
-            params['recvWindow'] = 5000
-            url = f"{BASE_URL}{path}?{_firmar(params)}"
-            r = requests.request(method, url, headers=headers, timeout=TIMEOUT)
-        else:
-            r = requests.request(method, f"{BASE_URL}{path}", params=params,
-                                 headers=headers, timeout=TIMEOUT)
-    except requests.RequestException as e:
-        raise ErrorEjecucion(f"{method} {path}: fallo de red — {e}") from e
-    if r.status_code != 200:
-        raise ErrorEjecucion(f"{method} {path} -> {r.status_code}: {r.text}")
-    return r.json()
+class StopDispararia(ErrorEjecucion):
+    """El stop pedido se dispararía de inmediato: el precio ya cruzó el nivel."""
 
 
 # ---------------------------------------------------------------------------
-# Modo hedge: sin él, una venta estando largo reduce el largo (no abre corto)
+# Modo hedge
 # ---------------------------------------------------------------------------
 def asegurar_modo_hedge():
     """Activa dualSidePosition si no lo estaba. Binance solo deja cambiarlo con
@@ -93,18 +53,18 @@ def asegurar_modo_hedge():
     global _hedge_ok
     if _hedge_ok:
         return
-    estado = _request('GET', '/fapi/v1/positionSide/dual')
+    estado = request('GET', '/fapi/v1/positionSide/dual')
     if estado.get('dualSidePosition'):
         _hedge_ok = True
         return
     try:
-        _request('POST', '/fapi/v1/positionSide/dual', {'dualSidePosition': 'true'})
+        request('POST', '/fapi/v1/positionSide/dual', {'dualSidePosition': 'true'})
     except ErrorEjecucion as e:
         raise ErrorEjecucion(
             "La cuenta del testnet está en modo ONE-WAY y no se pudo cambiar a HEDGE "
             "(Binance solo lo permite sin posiciones ni órdenes abiertas). En one-way, "
             "una venta estando largo REDUCE el largo en vez de abrir un corto: las "
-            f"operaciones del bot no se reflejarían. Cierra todo en el testnet y reintenta. [{e}]") from e
+            f"operaciones del bot no se reflejarían. Cierra todo y reintenta. [{e}]") from e
     _hedge_ok = True
     log.info("testnet: modo HEDGE activado")
 
@@ -113,66 +73,20 @@ def _position_side(lado):
     return 'LONG' if lado == 'BUY' else 'SHORT'
 
 
-def info_simbolo(symbol):
-    """Precisión de cantidad/precio del símbolo (exchangeInfo, público, cacheado)."""
-    if symbol in _info_simbolo_cache:
-        return _info_simbolo_cache[symbol]
-    data = _request('GET', '/fapi/v1/exchangeInfo', firmado=False)
-    for s in data.get('symbols', []):
-        if s['symbol'] != symbol:
-            continue
-        qty_step = price_step = None
-        for f in s['filters']:
-            if f['filterType'] == 'LOT_SIZE':
-                qty_step = float(f['stepSize'])
-            elif f['filterType'] == 'PRICE_FILTER':
-                price_step = float(f['tickSize'])
-        info = {'qty_step': qty_step, 'price_step': price_step,
-                'qty_precision': s['quantityPrecision'],
-                'price_precision': s['pricePrecision']}
-        _info_simbolo_cache[symbol] = info
-        return info
-    raise ErrorEjecucion(f"Símbolo {symbol} no existe en exchangeInfo del testnet.")
-
-
-def _redondear(valor, paso, precision):
-    if not paso:
-        return round(valor, precision)
-    pasos = round(valor / paso)
-    return round(pasos * paso, precision)
-
-
-def balance_disponible_testnet():
-    """Disponible USDT (efectivo libre, sin el margen bloqueado por posiciones
-    abiertas). Sirve para saber si CABE una orden nueva, no para dimensionar."""
-    data = _request('GET', '/fapi/v2/balance', firmado=True)
-    for b in data:
-        if b['asset'] == 'USDT':
-            return float(b['availableBalance'])
-    return None
-
-
-def equity_real():
-    """PATRIMONIO de la cuenta = efectivo + flotante de las posiciones abiertas
-    (regla usuario 15 jul: "el 0.1% de la cuenta NETA"). Es lo correcto para
-    dimensionar: el disponible baja con el margen bloqueado y encogería el riesgo
-    artificialmente cuando hay posiciones vivas."""
-    acc = _request('GET', '/fapi/v2/account', {})
-    return float(acc['totalWalletBalance']) + float(acc['totalUnrealizedProfit'])
-
-
+# ---------------------------------------------------------------------------
+# Sizing
+# ---------------------------------------------------------------------------
 def calcular_cantidad(symbol, entrada, sl, balance_virtual):
-    """Cantidad (en el activo base) para arriesgar RIESGO_CUENTA_PCT del balance
-    virtual dado, según distancia al SL. Redondeada al step del símbolo."""
+    """Cantidad (en el activo base) para arriesgar lo configurado, según la
+    distancia al SL. Redondeada al step del símbolo."""
     riesgo_precio = abs(entrada - sl)
     if riesgo_precio <= 0:
         raise ErrorEjecucion("Riesgo en precio es cero: no se puede dimensionar.")
-    # Monto fijo en dólares si está configurado (regla usuario: "riesgo $1"), si no
-    # el % del balance. El fijo no cambia con el balance.
+    # Monto fijo en dólares si está configurado; si no, % de la cuenta neta.
     riesgo_dolares = RIESGO_USD if RIESGO_USD > 0 else balance_virtual * RIESGO_CUENTA_PCT
     cantidad = riesgo_dolares / riesgo_precio
     info = info_simbolo(symbol)
-    cantidad = _redondear(cantidad, info['qty_step'], info['qty_precision'])
+    cantidad = redondear(cantidad, info['qty_step'], info['qty_precision'])
     if cantidad <= 0:
         raise ErrorEjecucion(f"Cantidad calculada es {cantidad} tras redondear "
                              f"(riesgo ${riesgo_dolares:.2f} / {riesgo_precio:.4f} "
@@ -185,7 +99,7 @@ def _precio_llenado(symbol, order_id, intentos=5):
     deslizamiento). Una MARKET llena al instante, pero se reintenta por si el
     exchange aún no la reporta."""
     for i in range(intentos):
-        o = _request('GET', '/fapi/v1/order', {'symbol': symbol, 'orderId': order_id})
+        o = request('GET', '/fapi/v1/order', {'symbol': symbol, 'orderId': order_id})
         precio = float(o.get('avgPrice') or 0)
         if o.get('status') == 'FILLED' and precio > 0:
             return precio
@@ -193,22 +107,25 @@ def _precio_llenado(symbol, order_id, intentos=5):
     return None
 
 
+# ---------------------------------------------------------------------------
+# Órdenes
+# ---------------------------------------------------------------------------
 def abrir_posicion(symbol, lado, entrada, sl, tp, balance_virtual):
     """ENTRADA a mercado + SL + TP reales en el testnet (modo hedge).
 
-    Devuelve {'cantidad', 'ordenes' (ids para cancelar sólo las suyas),
-    'order_id_sl', 'entrada_real' (precio de llenado), 'inicio_ms', 'position_side'}.
+    Devuelve {'cantidad', 'position_side', 'entrada_real', 'inicio_ms',
+    'order_id_entrada', 'algo_sl', 'algo_tp', 'algos'}.
     """
     asegurar_modo_hedge()
     cantidad = calcular_cantidad(symbol, entrada, sl, balance_virtual)
     info = info_simbolo(symbol)
-    sl_r = _redondear(sl, info['price_step'], info['price_precision'])
-    tp_r = _redondear(tp, info['price_step'], info['price_precision'])
+    sl_r = redondear(sl, info['price_step'], info['price_precision'])
+    tp_r = redondear(tp, info['price_step'], info['price_precision'])
     ps = _position_side(lado)
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
     inicio_ms = int(time.time() * 1000) - 1000
 
-    orden_entrada = _request('POST', '/fapi/v1/order', {
+    orden_entrada = request('POST', '/fapi/v1/order', {
         'symbol': symbol, 'side': lado, 'positionSide': ps,
         'type': 'MARKET', 'quantity': cantidad,
     })
@@ -217,9 +134,8 @@ def abrir_posicion(symbol, lado, entrada, sl, tp, balance_virtual):
     log.info("testnet %s: ENTRADA %s qty=%s -> orderId=%s llenó en %s (teórica %s)",
              symbol, lado, cantidad, id_entrada, entrada_real, entrada)
 
-    # SL y TP: órdenes CONDICIONALES -> Algo Order API (ver _algo_stop). El
-    # STOP_MARKET en /fapi/v1/order dejó de existir el 9-dic-2025 y sin esto la
-    # entrada quedaba SIN STOP (posición desnuda, el bug del 14 jul).
+    # SL y TP condicionales -> Algo API. Sin esto la entrada quedaba SIN STOP
+    # (posición desnuda, el bug del 14 jul).
     algo_sl = _algo_stop(symbol, cierre, ps, 'STOP_MARKET', sl_r, cantidad)
     algo_tp = _algo_stop(symbol, cierre, ps, 'TAKE_PROFIT_MARKET', tp_r, cantidad)
     return {'cantidad': cantidad,
@@ -233,9 +149,8 @@ def abrir_posicion(symbol, lado, entrada, sl, tp, balance_virtual):
 
 def _algo_stop(symbol, side, position_side, tipo, trigger, cantidad):
     """Coloca una orden condicional (STOP_MARKET / TAKE_PROFIT_MARKET) en la Algo
-    Order API. Devuelve el algoId. Desde el 9-dic-2025 Binance migró TODAS las
-    condicionales a este servicio: el endpoint clásico las rechaza (-4120)."""
-    o = _request('POST', '/fapi/v1/algoOrder', {
+    Order API. Devuelve el algoId."""
+    o = request('POST', '/fapi/v1/algoOrder', {
         'symbol': symbol, 'side': side, 'positionSide': position_side,
         'algoType': 'CONDITIONAL', 'type': tipo,
         'triggerPrice': trigger, 'quantity': cantidad,
@@ -243,19 +158,15 @@ def _algo_stop(symbol, side, position_side, tipo, trigger, cantidad):
     return o.get('algoId')
 
 
-class StopDispararia(ErrorEjecucion):
-    """El stop pedido se dispararía de inmediato: el precio ya cruzó el nivel."""
-
-
 def mover_stop(symbol, lado, cantidad, algo_viejo, nuevo_stop, position_side):
     """Cancela el SL viejo (algo) y coloca uno nuevo (ej. a breakeven tras el
     parcial). Devuelve el algoId nuevo.
 
     Si el nuevo stop se dispararía ya (el precio volvió al nivel antes de poder
-    moverlo, -2021), se avisa con StopDispararia para que quien llama cierre a
+    moverlo, -2021), avisa con StopDispararia para que quien llama cierre a
     mercado en vez de dejar la posición sin stop."""
     info = info_simbolo(symbol)
-    stop_r = _redondear(nuevo_stop, info['price_step'], info['price_precision'])
+    stop_r = redondear(nuevo_stop, info['price_step'], info['price_precision'])
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
     if algo_viejo is not None:
         cancelar_ordenes(symbol, [algo_viejo])
@@ -268,13 +179,13 @@ def mover_stop(symbol, lado, cantidad, algo_viejo, nuevo_stop, position_side):
 
 
 def cerrar_parcial(symbol, lado, cantidad_parcial, position_side):
-    """Cierra media posición a mercado (Secc 20: parcial obligatorio)."""
+    """Cierra parte de la posición a mercado (Secc 20: parcial obligatorio)."""
     cierre = 'SELL' if lado == 'BUY' else 'BUY'
     info = info_simbolo(symbol)
-    cantidad_parcial = _redondear(cantidad_parcial, info['qty_step'], info['qty_precision'])
+    cantidad_parcial = redondear(cantidad_parcial, info['qty_step'], info['qty_precision'])
     if cantidad_parcial <= 0:
         return None
-    orden = _request('POST', '/fapi/v1/order', {
+    orden = request('POST', '/fapi/v1/order', {
         'symbol': symbol, 'side': cierre, 'positionSide': position_side,
         'type': 'MARKET', 'quantity': cantidad_parcial,
     })
@@ -282,18 +193,17 @@ def cerrar_parcial(symbol, lado, cantidad_parcial, position_side):
 
 
 def cerrar_a_mercado(symbol, lado, cantidad, position_side):
-    """Cierra lo que quede de la posición a mercado (cuando la gestión da la
-    operación por terminada pero el SL/TP del exchange no ha saltado)."""
+    """Cierra lo que quede de la posición a mercado."""
     return cerrar_parcial(symbol, lado, cantidad, position_side)
 
 
 def cancelar_ordenes(symbol, algo_ids):
     """Cancela SOLO las órdenes condicionales (SL/TP) indicadas, por su algoId.
     NUNCA todas: eso borraba los SL/TP de las demás operaciones vivas del mismo
-    símbolo (auditoría 14 jul). La entrada ya está llenada, no se cancela."""
+    símbolo (auditoría 14 jul)."""
     for aid in algo_ids or []:
         try:
-            _request('DELETE', '/fapi/v1/algoOrder', {'symbol': symbol, 'algoId': aid})
+            request('DELETE', '/fapi/v1/algoOrder', {'symbol': symbol, 'algoId': aid})
         except ErrorEjecucion:
             # Lo normal: ya se disparó o ya no existe. No es un fallo.
             log.debug("testnet: el algo %s de %s ya no estaba abierto", aid, symbol)
@@ -305,184 +215,6 @@ def algos_abiertos(symbol, algo_ids):
     verdad del cierre: el exchange, no la lectura de velas del bot."""
     if not algo_ids:
         return set()
-    abiertos = _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol})
+    abiertos = request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol})
     vivos = {str(a.get('algoId')) for a in abiertos}
     return {a for a in algo_ids if str(a) in vivos}
-
-
-def balance_real(symbol=None):
-    """La CUENTA NETA (patrimonio): efectivo + flotante. El bot usa ESTE para
-    dimensionar y reportar — es el 0.1% de la cuenta neta que pidió el operador,
-    no el disponible (que baja con el margen bloqueado)."""
-    return equity_real()
-
-
-# ---------------------------------------------------------------------------
-# Vista de la CARTERA (para la gestión de conjunto y la red de seguridad)
-# ---------------------------------------------------------------------------
-def posiciones(symbol):
-    """Posiciones abiertas del símbolo: [{side, amt(con signo), entry, mark, upnl}]."""
-    out = []
-    for p in _request('GET', '/fapi/v2/positionRisk', {'symbol': symbol}):
-        amt = float(p.get('positionAmt', 0))
-        if amt == 0:
-            continue
-        out.append({'side': p['positionSide'], 'amt': amt,
-                    'entry': float(p['entryPrice']), 'mark': float(p['markPrice']),
-                    'upnl': float(p['unRealizedProfit'])})
-    return out
-
-
-def cobertura_algos(symbol):
-    """Por lado, cuánta cantidad cubren los STOP y los TP puestos, y el TP de
-    referencia. Devuelve {'LONG': {...}, 'SHORT': {...}}."""
-    cob = {'LONG': {'sl': 0.0, 'tp': 0.0, 'tp_px': None},
-           'SHORT': {'sl': 0.0, 'tp': 0.0, 'tp_px': None}}
-    for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol}):
-        ps, q = a.get('positionSide'), float(a.get('quantity', 0))
-        if ps not in cob:
-            continue
-        if a['orderType'] == 'STOP_MARKET':
-            cob[ps]['sl'] += q
-        elif a['orderType'] == 'TAKE_PROFIT_MARKET':
-            cob[ps]['tp'] += q
-            cob[ps]['tp_px'] = float(a['triggerPrice'])
-    return cob
-
-
-def cerrar_todo(symbol):
-    """Cierra TODAS las posiciones del símbolo a mercado y cancela sus algos.
-    Devuelve el P&L realizado por la maniobra."""
-    inicio = int(time.time() * 1000) - 500
-    for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol}):
-        cancelar_ordenes(symbol, [a.get('algoId')])
-    for p in posiciones(symbol):
-        lado_cierre = 'SELL' if p['amt'] > 0 else 'BUY'
-        try:
-            _request('POST', '/fapi/v1/order', {
-                'symbol': symbol, 'side': lado_cierre, 'positionSide': p['side'],
-                'type': 'MARKET', 'quantity': abs(p['amt'])})
-        except ErrorEjecucion:
-            log.exception("cerrar_todo: no se pudo cerrar %s", p['side'])
-    time.sleep(1)
-    return pnl_realizado(symbol, inicio, int(time.time() * 1000))
-
-
-def _algos_de_lado(symbol, lado):
-    """STOP y TP abiertos de un lado, ordenados (para recortar el exceso)."""
-    sl, tp = [], []
-    for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol}):
-        if a.get('positionSide') != lado:
-            continue
-        (sl if a['orderType'] == 'STOP_MARKET' else tp).append(a)
-    return sl, tp
-
-
-def proteger_descubierto(symbol, stop_pct=0.005):
-    """RED DE SEGURIDAD, cada ciclo: los stops/TP deben igualar la posición.
-      - Si FALTA cobertura (posición sin stop): pone un stop de emergencia (o
-        cierra a mercado si ese stop se dispararía ya). Bug del parcial 15 jul.
-      - Si SOBRA (stops huérfanos de operaciones ya cerradas por su TP): los
-        cancela. Aunque con reduceOnly son inofensivos, ensucian la vista.
-    Devuelve la lista de acciones tomadas."""
-    info = info_simbolo(symbol)
-    paso = float(info['qty_step'])
-    acciones = []
-    lados_con_pos = set()
-
-    for p in posiciones(symbol):
-        lado = p['side']
-        lados_con_pos.add(lado)
-        cob = cobertura_algos(symbol).get(lado, {})
-        neto = abs(p['amt'])
-        descubierto = neto - cob.get('sl', 0.0)
-
-        if descubierto > paso:                       # FALTA stop -> proteger
-            qty = _redondear(descubierto, paso, info['qty_precision'])
-            if lado == 'LONG':
-                trigger = _redondear(p['mark'] * (1 - stop_pct), info['price_step'], info['price_precision'])
-                cierre = 'SELL'
-            else:
-                trigger = _redondear(p['mark'] * (1 + stop_pct), info['price_step'], info['price_precision'])
-                cierre = 'BUY'
-            try:
-                aid = _algo_stop(symbol, cierre, lado, 'STOP_MARKET', trigger, qty)
-                acciones.append({'side': lado, 'qty': qty, 'trigger': trigger, 'algoId': aid})
-                log.warning("testnet: RED %s %s BNB sin stop -> STOP @ %s", lado, qty, trigger)
-            except ErrorEjecucion:
-                log.exception("red: stop falló, cierro %s a mercado", qty)
-                cerrar_a_mercado(symbol, 'BUY' if lado == 'LONG' else 'SELL', qty, lado)
-                acciones.append({'side': lado, 'qty': qty, 'cerrado_a_mercado': True})
-        elif -descubierto > paso:                    # SOBRAN stops -> ajustar a la posición
-            n = _ajustar_cobertura(symbol, lado, neto, info)
-            if n:
-                acciones.append({'side': lado, 'huerfanos_ajustados': n})
-
-    # Lados SIN posición pero con algos colgando (todo cerrado): cancelar todo
-    for lado in ('LONG', 'SHORT'):
-        if lado in lados_con_pos:
-            continue
-        sl, tp = _algos_de_lado(symbol, lado)
-        colgados = sl + tp
-        if colgados:
-            cancelar_ordenes(symbol, [a['algoId'] for a in colgados])
-            acciones.append({'side': lado, 'huerfanos_cancelados': len(colgados)})
-    return acciones
-
-
-def _ajustar_cobertura(symbol, lado, neto, info):
-    """Deja los STOP (y TP) del lado sumando EXACTAMENTE la posición neta. Recorre
-    las órdenes de la más protectora a la menos: las que caben se conservan, la que
-    excede se recorta (cancelar + recolocar por lo que falta a su mismo trigger), y
-    las que sobran enteras se cancelan. Así nunca queda ni desnudo ni con huérfanos.
-    Conserva los stops más CERCANOS al precio (los que cortan antes la pérdida)."""
-    paso = float(info['qty_step'])
-    cierre = 'SELL' if lado == 'LONG' else 'BUY'
-    n = 0
-    for tipo in ('STOP_MARKET', 'TAKE_PROFIT_MARKET'):
-        vivos = [a for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol})
-                 if a.get('positionSide') == lado and a['orderType'] == tipo]
-        # el más protector primero: STOP más alto en LONG (corta antes), y para el
-        # TP el más bajo en LONG (se cobra antes) — reflejado en SHORT
-        rev = (tipo == 'STOP_MARKET') == (lado == 'LONG')
-        vivos.sort(key=lambda a: float(a['triggerPrice']), reverse=rev)
-        acum = 0.0
-        for a in vivos:
-            q = float(a['quantity'])
-            if acum >= neto - paso:                  # ya cubierto: sobra entero
-                cancelar_ordenes(symbol, [a['algoId']]); n += 1
-            elif acum + q > neto + paso:             # excede: recortar al tamaño justo
-                falta = _redondear(neto - acum, paso, info['qty_precision'])
-                cancelar_ordenes(symbol, [a['algoId']]); n += 1
-                if falta > 0:
-                    try:
-                        _algo_stop(symbol, cierre, lado, tipo,
-                                   float(a['triggerPrice']), falta)
-                    except ErrorEjecucion:
-                        log.exception("ajuste: no se pudo recolocar %s %s", tipo, falta)
-                acum = neto
-            else:
-                acum += q
-    return n
-
-
-def pnl_realizado(symbol, desde_ms, hasta_ms=None):
-    """P&L REAL según el exchange en la ventana [desde_ms, hasta_ms]: suma de
-    realizedPnl menos comisiones de los trades del símbolo.
-
-    OJO — atribución con posiciones apiladas: cuando un stop condicional se
-    dispara, Binance crea una orden nueva cuyo orderId NO conocíamos, así que ya
-    no se puede filtrar por 'nuestras' órdenes. Se suma por VENTANA TEMPORAL (de
-    la apertura al cierre de esta operación). Con varias del mismo lado abiertas a
-    la vez, el reparto es aproximado; la verdad de la CUENTA la da siempre el
-    balance real del testnet."""
-    params = {'symbol': symbol, 'startTime': int(desde_ms), 'limit': 1000}
-    if hasta_ms:
-        params['endTime'] = int(hasta_ms)
-    trades = _request('GET', '/fapi/v1/userTrades', params)
-    pnl = comision = 0.0
-    for t in trades:
-        pnl += float(t.get('realizedPnl', 0) or 0)
-        comision += float(t.get('commission', 0) or 0)
-    return {'pnl': pnl - comision, 'bruto': pnl, 'comision': comision,
-            'n_trades': len(trades)}

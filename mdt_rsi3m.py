@@ -33,14 +33,13 @@ INTERRUPTORES (la diferencia entre el bot automático y el modo bajo demanda):
 import numpy as np
 import pandas as pd
 
-from mdt_config import SYMBOL, MIN_RIESGO_PCT
+from mdt_config import COMISION_LADO, MIN_RIESGO_PCT, SYMBOL
 from mdt_feed import descargar
 
 RSI_PERIOD = 14
 MID, OB, OS = 50, 70, 30
 RR = 10                    # TP = RR * riesgo (config validada)
-FEE_ENTRY = FEE_EXIT = 0.0005    # taker 0.05% (entrada y salida a mercado)
-MIN_RISK_PCT = MIN_RIESGO_PCT    # SL más cerca que esto: las comisiones se lo comen
+FEE_ENTRY = FEE_EXIT = COMISION_LADO   # única fuente: mdt_config
 EMA_FAST, EMA_SLOW = 50, 200
 H1_VENTA_BANDA = (50, 70)
 H1_COMPRA_BANDA = (30, 50)
@@ -179,7 +178,7 @@ def senales(df, lados=("long", "short"), estructural=False, filtro_1h=False,
         nonlocal pos_long, pos_short, descartados
         e = float(v['close'])
         riesgo = abs(sl_ext - e)
-        if riesgo / e < MIN_RISK_PCT:     # SL pegado: las comisiones se lo comen
+        if riesgo / e < MIN_RIESGO_PCT:     # SL pegado: las comisiones se lo comen
             descartados += 1
             return False
         p = {'side': side, 'i': i, 'dt': v['dt'], 'entry': e, 'sl': float(sl_ext),

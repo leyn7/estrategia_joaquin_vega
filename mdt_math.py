@@ -1,17 +1,33 @@
+# -*- coding: utf-8 -*-
+"""Matemática pura de la estrategia: zonas, seguimiento de ciclo, concurrencia.
+
+Los números de la biblia viven en mdt_config con nombre (auditoría 16 jul: antes
+este módulo usaba los literales 0.191/0.382/0.618 y la config definía constantes
+que nadie importaba — dos fuentes para el mismo número).
+"""
+from mdt_config import ZONA_191, NIVEL_382, NIVEL_618
+
+
 def calc_zones(origen, fin, direction="BULLISH"):
     impulse = abs(origen - fin)
-    zone_size = impulse * 0.191
+    zone_size = impulse * ZONA_191
     if direction == "BULLISH":
         z_alta = (fin, fin + zone_size)
-        z_media = (fin - (impulse*0.618), fin - (impulse*0.618) - zone_size)
+        z_media = (fin - (impulse*NIVEL_618), fin - (impulse*NIVEL_618) - zone_size)
         z_baja = (origen, origen - zone_size)
-        act = fin - (impulse*0.382)
+        act = fin - (impulse*NIVEL_382)
     else:
         z_alta = (origen, origen + zone_size)
-        z_media = (fin + (impulse*0.618), fin + (impulse*0.618) + zone_size)
+        z_media = (fin + (impulse*NIVEL_618), fin + (impulse*NIVEL_618) + zone_size)
         z_baja = (fin, fin - zone_size)
-        act = fin + (impulse*0.382)
+        act = fin + (impulse*NIVEL_382)
     return {'origen': origen, 'fin': fin, 'impulse': impulse, 'ALTA': z_alta, 'MEDIA': z_media, 'BAJA': z_baja, 'activacion': act}
+
+
+def banda_de(nombre):
+    """La banda (Alta/Media/Baja) del nombre de una zona: "Sub-C X Nivel 2 (Media)"
+    -> "Media". Estaba escrito 3 veces (formato, reportes, eventos)."""
+    return nombre.rsplit('(', 1)[-1].rstrip(')') if '(' in nombre else '?'
 
 def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
     """Seguimiento CRONOLÓGICO de un ciclo desde su nacimiento (reglas usuario 3 jul 2026).
@@ -77,8 +93,8 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
             # re-mide todo solo cuando nace tocando su 38.2. Sin activar, el
             # fibo corrido manda (aún no hay medida fijada).
             imp_vigente = (fin_act - origen_v) if (activado and fin_act is not None) else impulso
-            muerte = origen_v - imp_vigente * 0.382
-            act = fin_v - impulso * 0.382
+            muerte = origen_v - imp_vigente * NIVEL_382
+            act = fin_v - impulso * NIVEL_382
 
             if lo <= muerte:
                 return {'estado': 'MUERTO', 'hora_muerte': times[i], 'nivel_muerte': m * muerte,
@@ -93,7 +109,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
                 # Evolución (Secc 8): el precio se alejó del extremo de la excursión
                 # el 38.2% de la medida mayor (extremo -> fin): el ciclo viejo muere
                 # y el mayor toma su lugar, re-anclado en el extremo y ACTIVADO.
-                act_evo = exc_min + (fin_v - exc_min) * 0.382
+                act_evo = exc_min + (fin_v - exc_min) * NIVEL_382
                 if hi >= act_evo:
                     origen_v = exc_min
                     exc_min = None
@@ -140,7 +156,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
                     # ni desactiva. El episodio solo muere si toca la anulación de
                     # la Alta (fin_act + 38.2% del impulso vigente).
                     imp_act = fin_act - origen_v
-                    if hi >= fin_act + imp_act * 0.382:
+                    if hi >= fin_act + imp_act * NIVEL_382:
                         activado = False
                         fin_act = None
                         hora_act = None
@@ -163,7 +179,7 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
     if activado and fin_act is not None and fin_v > fin_act:
         # Extremo nuevo tras la activación: medida candidata pendiente de nacer
         res['fin_candidato'] = m * fin_v
-        res['activacion_candidata'] = m * (fin_v - (fin_v - origen_v) * 0.382)
+        res['activacion_candidata'] = m * (fin_v - (fin_v - origen_v) * NIVEL_382)
     if exc_min is not None:
         # Clasificación de la excursión por la posición ACTUAL del precio:
         # dentro del 19.1% = trabajando la zona del origen (operativa);
@@ -171,15 +187,15 @@ def evaluar_ciclo(origen, df, desde_idx=0, direction="BULLISH"):
         # Medida VIGENTE (Secc 4+6): la zona del origen y la muerte son del
         # fibo de las cajas, no del candidato corrido.
         impulso = fin_zonas - origen_v
-        limite_zona = origen_v - impulso * 0.191
+        limite_zona = origen_v - impulso * ZONA_191
         close_v = m * float(df['close'].iloc[-1])
         res['zona_origen_en_trabajo'] = close_v >= limite_zona
         res['limite_zona_origen'] = m * limite_zona
-        res['nivel_muerte'] = m * (origen_v - impulso * 0.382)
+        res['nivel_muerte'] = m * (origen_v - impulso * NIVEL_382)
         res['extremo_excursion'] = m * exc_min
         res['hora_excursion'] = hora_exc
         # Fibo de alerta de la evolución (Secc 8): medida mayor extremo -> fin
-        res['evolucion_38_2'] = m * (exc_min + (fin_v - exc_min) * 0.382)
+        res['evolucion_38_2'] = m * (exc_min + (fin_v - exc_min) * NIVEL_382)
     return res
 
 

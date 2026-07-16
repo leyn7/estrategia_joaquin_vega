@@ -22,6 +22,7 @@ import pandas as pd
 from mdt_config import ZONA_MAX_OPERABLE_PCT
 from mdt_operacion import ESTADOS_OPERABLES
 from mdt_estado import INTERVALO, naive, podar_firmas
+from mdt_math import banda_de
 from mdt_escaner import escanear_ancla
 from mdt_formato import (hora_cot, resumen_analisis, texto_escaneo,
                          texto_zona_estrecha)
@@ -49,7 +50,7 @@ FMT_ESTADO = 5  # versión de la firma; al cambiarla el símbolo se re-basa sin 
 
 
 def _clave_zona(lado, nombre, ancla):
-    banda = nombre.rsplit('(', 1)[-1].rstrip(')') if '(' in nombre else '?'
+    banda = banda_de(nombre)
     return f"{lado}|{banda}|{ancla:.2f}"
 
 

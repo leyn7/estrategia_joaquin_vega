@@ -95,8 +95,6 @@ from mdt_escaner import escanear_completo  # noqa: E402 (tras el parche)
 from mdt_gestion import (entrada_de_resultado, gestionar,  # noqa: E402
                          ESTADOS_EJECUTADOS, ESTADOS_EJECUTADOS_MUERTOS)
 
-# La caché se congela: el walk-forward corta con `cutoff`, nunca ve el futuro del corte
-_AHORA_REAL = pd.Timestamp.now(tz='UTC').tz_localize(None)
 
 
 # ---------------------------------------------------------------------------
