@@ -143,13 +143,22 @@ def _redondear(valor, paso, precision):
 
 
 def balance_disponible_testnet():
-    """Balance USDT real del testnet (informativo, para cruzar contra la cuenta
-    virtual — NO es lo que se usa para dimensionar posiciones)."""
+    """Disponible USDT (efectivo libre, sin el margen bloqueado por posiciones
+    abiertas). Sirve para saber si CABE una orden nueva, no para dimensionar."""
     data = _request('GET', '/fapi/v2/balance', firmado=True)
     for b in data:
         if b['asset'] == 'USDT':
             return float(b['availableBalance'])
     return None
+
+
+def equity_real():
+    """PATRIMONIO de la cuenta = efectivo + flotante de las posiciones abiertas
+    (regla usuario 15 jul: "el 0.1% de la cuenta NETA"). Es lo correcto para
+    dimensionar: el disponible baja con el margen bloqueado y encogería el riesgo
+    artificialmente cuando hay posiciones vivas."""
+    acc = _request('GET', '/fapi/v2/account', {})
+    return float(acc['totalWalletBalance']) + float(acc['totalUnrealizedProfit'])
 
 
 def calcular_cantidad(symbol, entrada, sl, balance_virtual):
@@ -302,9 +311,10 @@ def algos_abiertos(symbol, algo_ids):
 
 
 def balance_real(symbol=None):
-    """Balance USDT real del testnet (lo que de verdad tiene la cuenta demo).
-    El bot usa ESTE para dimensionar y reportar, no un número inventado."""
-    return balance_disponible_testnet()
+    """La CUENTA NETA (patrimonio): efectivo + flotante. El bot usa ESTE para
+    dimensionar y reportar — es el 0.1% de la cuenta neta que pidió el operador,
+    no el disponible (que baja con el margen bloqueado)."""
+    return equity_real()
 
 
 def pnl_realizado(symbol, desde_ms, hasta_ms=None):
