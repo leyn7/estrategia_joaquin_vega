@@ -368,40 +368,102 @@ def cerrar_todo(symbol):
     return pnl_realizado(symbol, inicio, int(time.time() * 1000))
 
 
+def _algos_de_lado(symbol, lado):
+    """STOP y TP abiertos de un lado, ordenados (para recortar el exceso)."""
+    sl, tp = [], []
+    for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol}):
+        if a.get('positionSide') != lado:
+            continue
+        (sl if a['orderType'] == 'STOP_MARKET' else tp).append(a)
+    return sl, tp
+
+
 def proteger_descubierto(symbol, stop_pct=0.005):
-    """RED DE SEGURIDAD: si una posición tiene más cantidad que stops, le pone un
-    STOP a la diferencia para que NUNCA quede nada desnudo (bug del parcial 15 jul
-    y cualquier descuadre). El stop va a stop_pct del precio, del lado que protege.
-    Devuelve la lista de coberturas de emergencia colocadas."""
+    """RED DE SEGURIDAD, cada ciclo: los stops/TP deben igualar la posición.
+      - Si FALTA cobertura (posición sin stop): pone un stop de emergencia (o
+        cierra a mercado si ese stop se dispararía ya). Bug del parcial 15 jul.
+      - Si SOBRA (stops huérfanos de operaciones ya cerradas por su TP): los
+        cancela. Aunque con reduceOnly son inofensivos, ensucian la vista.
+    Devuelve la lista de acciones tomadas."""
     info = info_simbolo(symbol)
-    cob = cobertura_algos(symbol)
-    puestos = []
+    paso = float(info['qty_step'])
+    acciones = []
+    lados_con_pos = set()
+
     for p in posiciones(symbol):
         lado = p['side']
-        descubierto = abs(p['amt']) - cob.get(lado, {}).get('sl', 0.0)
-        if descubierto <= float(info['qty_step']):
-            continue   # cubierto (o resto insignificante)
-        qty = _redondear(descubierto, info['qty_step'], info['qty_precision'])
-        if qty <= 0:
+        lados_con_pos.add(lado)
+        cob = cobertura_algos(symbol).get(lado, {})
+        neto = abs(p['amt'])
+        descubierto = neto - cob.get('sl', 0.0)
+
+        if descubierto > paso:                       # FALTA stop -> proteger
+            qty = _redondear(descubierto, paso, info['qty_precision'])
+            if lado == 'LONG':
+                trigger = _redondear(p['mark'] * (1 - stop_pct), info['price_step'], info['price_precision'])
+                cierre = 'SELL'
+            else:
+                trigger = _redondear(p['mark'] * (1 + stop_pct), info['price_step'], info['price_precision'])
+                cierre = 'BUY'
+            try:
+                aid = _algo_stop(symbol, cierre, lado, 'STOP_MARKET', trigger, qty)
+                acciones.append({'side': lado, 'qty': qty, 'trigger': trigger, 'algoId': aid})
+                log.warning("testnet: RED %s %s BNB sin stop -> STOP @ %s", lado, qty, trigger)
+            except ErrorEjecucion:
+                log.exception("red: stop falló, cierro %s a mercado", qty)
+                cerrar_a_mercado(symbol, 'BUY' if lado == 'LONG' else 'SELL', qty, lado)
+                acciones.append({'side': lado, 'qty': qty, 'cerrado_a_mercado': True})
+        elif -descubierto > paso:                    # SOBRAN stops -> ajustar a la posición
+            n = _ajustar_cobertura(symbol, lado, neto, info)
+            if n:
+                acciones.append({'side': lado, 'huerfanos_ajustados': n})
+
+    # Lados SIN posición pero con algos colgando (todo cerrado): cancelar todo
+    for lado in ('LONG', 'SHORT'):
+        if lado in lados_con_pos:
             continue
-        # stop del lado correcto: bajo el precio para LONG, sobre el precio para SHORT
-        if lado == 'LONG':
-            trigger = _redondear(p['mark'] * (1 - stop_pct), info['price_step'], info['price_precision'])
-            cierre = 'SELL'
-        else:
-            trigger = _redondear(p['mark'] * (1 + stop_pct), info['price_step'], info['price_precision'])
-            cierre = 'BUY'
-        try:
-            aid = _algo_stop(symbol, cierre, lado, 'STOP_MARKET', trigger, qty)
-            puestos.append({'side': lado, 'qty': qty, 'trigger': trigger, 'algoId': aid})
-            log.warning("testnet: RED DE SEGURIDAD %s %s BNB sin stop -> STOP @ %s",
-                        lado, qty, trigger)
-        except ErrorEjecucion:
-            # Si el stop de emergencia se dispararía ya, cerrar esa cantidad a mercado
-            log.exception("red de seguridad: stop falló, cierro %s a mercado", qty)
-            cerrar_a_mercado(symbol, 'BUY' if lado == 'LONG' else 'SELL', qty, lado)
-            puestos.append({'side': lado, 'qty': qty, 'cerrado_a_mercado': True})
-    return puestos
+        sl, tp = _algos_de_lado(symbol, lado)
+        colgados = sl + tp
+        if colgados:
+            cancelar_ordenes(symbol, [a['algoId'] for a in colgados])
+            acciones.append({'side': lado, 'huerfanos_cancelados': len(colgados)})
+    return acciones
+
+
+def _ajustar_cobertura(symbol, lado, neto, info):
+    """Deja los STOP (y TP) del lado sumando EXACTAMENTE la posición neta. Recorre
+    las órdenes de la más protectora a la menos: las que caben se conservan, la que
+    excede se recorta (cancelar + recolocar por lo que falta a su mismo trigger), y
+    las que sobran enteras se cancelan. Así nunca queda ni desnudo ni con huérfanos.
+    Conserva los stops más CERCANOS al precio (los que cortan antes la pérdida)."""
+    paso = float(info['qty_step'])
+    cierre = 'SELL' if lado == 'LONG' else 'BUY'
+    n = 0
+    for tipo in ('STOP_MARKET', 'TAKE_PROFIT_MARKET'):
+        vivos = [a for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol})
+                 if a.get('positionSide') == lado and a['orderType'] == tipo]
+        # el más protector primero: STOP más alto en LONG (corta antes), y para el
+        # TP el más bajo en LONG (se cobra antes) — reflejado en SHORT
+        rev = (tipo == 'STOP_MARKET') == (lado == 'LONG')
+        vivos.sort(key=lambda a: float(a['triggerPrice']), reverse=rev)
+        acum = 0.0
+        for a in vivos:
+            q = float(a['quantity'])
+            if acum >= neto - paso:                  # ya cubierto: sobra entero
+                cancelar_ordenes(symbol, [a['algoId']]); n += 1
+            elif acum + q > neto + paso:             # excede: recortar al tamaño justo
+                falta = _redondear(neto - acum, paso, info['qty_precision'])
+                cancelar_ordenes(symbol, [a['algoId']]); n += 1
+                if falta > 0:
+                    try:
+                        _algo_stop(symbol, cierre, lado, tipo,
+                                   float(a['triggerPrice']), falta)
+                    except ErrorEjecucion:
+                        log.exception("ajuste: no se pudo recolocar %s %s", tipo, falta)
+                acum = neto
+            else:
+                acum += q
+    return n
 
 
 def pnl_realizado(symbol, desde_ms, hasta_ms=None):
