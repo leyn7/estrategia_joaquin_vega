@@ -154,27 +154,24 @@ def _testnet_parcial(sym, k, op, s, chat_id):
     if t is None:
         return
     media = t['cantidad'] / 2.0
+    cierre = 'SELL' if op['lado'] == 'BUY' else 'BUY'
+    info = mdt_ejecutor.info_simbolo(sym)
+    be = mdt_ejecutor._redondear(op['entrada'], info['price_step'], info['price_precision'])
     try:
-        # El TP viejo (por la cantidad entera) ya no vale: se cancela y el SL se
-        # re-coloca a breakeven por la mitad que queda viva.
         mdt_ejecutor.cerrar_parcial(sym, op['lado'], media, t['position_side'])
         mdt_ejecutor.cancelar_ordenes(sym, [a for a in (t.get('algo_sl'), t.get('algo_tp')) if a])
         t['cantidad_viva'] = media
-        # La mitad viva conserva SL (ahora en breakeven) Y TP: el exchange la
-        # cerrará por uno de los dos (la reconciliación lo detecta).
-        cierre = 'SELL' if op['lado'] == 'BUY' else 'BUY'
-        info = mdt_ejecutor.info_simbolo(sym)
-        be = mdt_ejecutor._redondear(op['entrada'], info['price_step'], info['price_precision'])
-        t['algo_sl'] = mdt_ejecutor._algo_stop(sym, cierre, t['position_side'],
-                                               'STOP_MARKET', be, media)
-        tp_obj = max(op['tp_zona']) if op['lado'] == 'SELL' else min(op['tp_zona'])
-        tp_r = mdt_ejecutor._redondear(tp_obj, info['price_step'], info['price_precision'])
-        t['algo_tp'] = mdt_ejecutor._algo_stop(sym, cierre, t['position_side'],
-                                               'TAKE_PROFIT_MARKET', tp_r, media)
-        t['algos'] = [t['algo_sl'], t['algo_tp']]
-    except mdt_ejecutor.StopDispararia:
-        # El precio ya volvió al breakeven antes de poder mover el stop: se cierra
-        # a mercado la mitad viva (el breakeven se alcanzó de hecho).
+    except mdt_ejecutor.ErrorEjecucion as e:
+        log.exception("testnet: fallo tomando el parcial de %s", k)
+        mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: fallo en parcial de {k}\n{e}")
+        return
+
+    # GARANTÍA: la mitad viva NUNCA queda sin stop. Se coloca primero el SL en
+    # breakeven; si se dispararía ya (-2021) o falla, se cierra a mercado (bug 15
+    # jul: si la recolocación fallaba, quedaba desnuda). El TP es secundario.
+    try:
+        t['algo_sl'] = mdt_ejecutor.mover_stop(sym, op['lado'], media, None, be, t['position_side'])
+    except (mdt_ejecutor.StopDispararia, mdt_ejecutor.ErrorEjecucion):
         mdt_ejecutor.cerrar_a_mercado(sym, op['lado'], media, t['position_side'])
         t['algo_sl'] = t['algo_tp'] = None
         t['algos'] = []
@@ -182,12 +179,80 @@ def _testnet_parcial(sym, k, op, s, chat_id):
         mdt_telegram.enviar(chat_id, f"🧪💰 {sym} | TESTNET: parcial hecho; el precio ya "
                                      f"tocaba breakeven, cerré el resto a mercado.")
         return
-    except mdt_ejecutor.ErrorEjecucion as e:
-        log.exception("testnet: fallo en parcial de %s", k)
-        mdt_telegram.enviar(chat_id, f"🧪❌ {sym} | TESTNET: fallo en parcial de {k}\n{e}")
-        return
+    try:
+        tp_obj = max(op['tp_zona']) if op['lado'] == 'SELL' else min(op['tp_zona'])
+        tp_r = mdt_ejecutor._redondear(tp_obj, info['price_step'], info['price_precision'])
+        t['algo_tp'] = mdt_ejecutor._algo_stop(sym, cierre, t['position_side'],
+                                               'TAKE_PROFIT_MARKET', tp_r, media)
+    except mdt_ejecutor.ErrorEjecucion:
+        t['algo_tp'] = None   # sin TP, pero CON stop: la posición está protegida
+    t['algos'] = [a for a in (t.get('algo_sl'), t.get('algo_tp')) if a]
     mdt_telegram.enviar(chat_id, f"🧪💰 {sym} | TESTNET: parcial real ejecutado, "
                                  f"SL movido a breakeven ({op['entrada']:.4f})")
+
+
+def _testnet_red_seguridad(sym, chat_id):
+    """Cada ciclo: ninguna posición puede quedar sin stop. Si la hay (descuadre,
+    parcial fallido...), se le pone uno de emergencia. Es la garantía última."""
+    import mdt_ejecutor
+    try:
+        puestos = mdt_ejecutor.proteger_descubierto(sym)
+    except Exception:  # noqa: BLE001
+        log.exception("red de seguridad testnet")
+        return
+    for x in puestos:
+        if x.get('cerrado_a_mercado'):
+            mdt_telegram.enviar(chat_id, f"🧪🛟 {sym} | RED DE SEGURIDAD: {x['qty']} BNB "
+                                         f"{x['side']} estaban sin stop; los cerré a mercado.")
+        else:
+            mdt_telegram.enviar(chat_id, f"🧪🛟 {sym} | RED DE SEGURIDAD: {x['qty']} BNB "
+                                         f"{x['side']} estaban SIN STOP; les puse uno de "
+                                         f"emergencia @ {x['trigger']}.")
+
+
+def _testnet_objetivo_conjunto(sym, ops, cuenta, chat_id):
+    """GESTIÓN DE CONJUNTO (regla usuario 15 jul): cerrar TODAS las posiciones de
+    golpe cuando el flotante conjunto alcanza lo que se ganaría si cada una llegara
+    a su TP. En vez de esperar TP individuales (imposibles de cobrar todos: unos
+    arriba, otros abajo), se toma la ganancia conjunta cuando iguala esa meta.
+
+    Devuelve True si cerró todo."""
+    import mdt_ejecutor
+    pos = mdt_ejecutor.posiciones(sym)
+    if not pos:
+        return False
+    flotante = sum(p['upnl'] for p in pos)
+    if flotante <= 0:
+        return False   # nunca se cierra el conjunto en pérdida
+
+    # Objetivo = suma de lo que ganaría cada posición en SU take-profit
+    cob = mdt_ejecutor.cobertura_algos(sym)
+    objetivo = 0.0
+    for p in pos:
+        c = cob.get(p['side'], {})
+        tp_px = c.get('tp_px')
+        if tp_px is None:
+            return False   # falta algún TP: no hay meta completa, no cerrar
+        objetivo += (tp_px - p['entry']) * p['amt']   # amt con signo
+    if objetivo <= 0 or flotante < objetivo:
+        return False
+
+    # El flotante conjunto ya iguala la meta de todos los TP: cerrar todo
+    real = mdt_ejecutor.cerrar_todo(sym)
+    cuenta['balance'] = mdt_ejecutor.balance_real(sym)
+    for k, o in ops.items():
+        if o.get('testnet') and o.get('fase') not in FASES_CERRADAS:
+            o['fase'] = 'TP'
+            o['r_final'] = 0.0
+    cuenta.setdefault('historial', []).append({
+        'op': 'CIERRE_CONJUNTO', 'patron': 'objetivo', 'fase': 'TP',
+        'pnl': round(real['pnl'], 2), 'balance': round(cuenta['balance'], 2),
+        'hora': 'objetivo conjunto', 'real': True})
+    mdt_telegram.enviar(chat_id,
+        f"🎯🧪 {sym} | OBJETIVO CONJUNTO ALCANZADO: cerré TODO\n"
+        f"  el flotante conjunto (+{flotante:.2f}) llegó a la meta de los TP (+{objetivo:.2f})\n"
+        f"  realizado: {real['pnl']:+.2f} USD | balance ${cuenta['balance']:.2f}")
+    return True
 
 
 def _testnet_reconciliar(sym, k, op, cuenta, chat_id):
@@ -262,6 +327,11 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
             cuenta['balance'] = mdt_ejecutor.balance_real(sym)
         except Exception:  # noqa: BLE001 — si el exchange no responde, se sigue con lo último
             log.exception("testnet: no se pudo leer el balance real")
+        # Red de seguridad: ninguna posición sin stop (cada ciclo, garantía última)
+        _testnet_red_seguridad(sym, chat_id)
+        # Gestión de conjunto: cerrar todo si el flotante llega a la meta de los TP
+        if _testnet_objetivo_conjunto(sym, ops, cuenta, chat_id):
+            return eventos   # se cerró todo: nada más que seguir este ciclo
 
     # 1) Registrar gatillos ejecutados nuevos (dedup por lado|ancla|patrón|entrada)
     for e in resultado['escaneos']:

@@ -317,6 +317,93 @@ def balance_real(symbol=None):
     return equity_real()
 
 
+# ---------------------------------------------------------------------------
+# Vista de la CARTERA (para la gestión de conjunto y la red de seguridad)
+# ---------------------------------------------------------------------------
+def posiciones(symbol):
+    """Posiciones abiertas del símbolo: [{side, amt(con signo), entry, mark, upnl}]."""
+    out = []
+    for p in _request('GET', '/fapi/v2/positionRisk', {'symbol': symbol}):
+        amt = float(p.get('positionAmt', 0))
+        if amt == 0:
+            continue
+        out.append({'side': p['positionSide'], 'amt': amt,
+                    'entry': float(p['entryPrice']), 'mark': float(p['markPrice']),
+                    'upnl': float(p['unRealizedProfit'])})
+    return out
+
+
+def cobertura_algos(symbol):
+    """Por lado, cuánta cantidad cubren los STOP y los TP puestos, y el TP de
+    referencia. Devuelve {'LONG': {...}, 'SHORT': {...}}."""
+    cob = {'LONG': {'sl': 0.0, 'tp': 0.0, 'tp_px': None},
+           'SHORT': {'sl': 0.0, 'tp': 0.0, 'tp_px': None}}
+    for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol}):
+        ps, q = a.get('positionSide'), float(a.get('quantity', 0))
+        if ps not in cob:
+            continue
+        if a['orderType'] == 'STOP_MARKET':
+            cob[ps]['sl'] += q
+        elif a['orderType'] == 'TAKE_PROFIT_MARKET':
+            cob[ps]['tp'] += q
+            cob[ps]['tp_px'] = float(a['triggerPrice'])
+    return cob
+
+
+def cerrar_todo(symbol):
+    """Cierra TODAS las posiciones del símbolo a mercado y cancela sus algos.
+    Devuelve el P&L realizado por la maniobra."""
+    inicio = int(time.time() * 1000) - 500
+    for a in _request('GET', '/fapi/v1/openAlgoOrders', {'symbol': symbol}):
+        cancelar_ordenes(symbol, [a.get('algoId')])
+    for p in posiciones(symbol):
+        lado_cierre = 'SELL' if p['amt'] > 0 else 'BUY'
+        try:
+            _request('POST', '/fapi/v1/order', {
+                'symbol': symbol, 'side': lado_cierre, 'positionSide': p['side'],
+                'type': 'MARKET', 'quantity': abs(p['amt'])})
+        except ErrorEjecucion:
+            log.exception("cerrar_todo: no se pudo cerrar %s", p['side'])
+    time.sleep(1)
+    return pnl_realizado(symbol, inicio, int(time.time() * 1000))
+
+
+def proteger_descubierto(symbol, stop_pct=0.005):
+    """RED DE SEGURIDAD: si una posición tiene más cantidad que stops, le pone un
+    STOP a la diferencia para que NUNCA quede nada desnudo (bug del parcial 15 jul
+    y cualquier descuadre). El stop va a stop_pct del precio, del lado que protege.
+    Devuelve la lista de coberturas de emergencia colocadas."""
+    info = info_simbolo(symbol)
+    cob = cobertura_algos(symbol)
+    puestos = []
+    for p in posiciones(symbol):
+        lado = p['side']
+        descubierto = abs(p['amt']) - cob.get(lado, {}).get('sl', 0.0)
+        if descubierto <= float(info['qty_step']):
+            continue   # cubierto (o resto insignificante)
+        qty = _redondear(descubierto, info['qty_step'], info['qty_precision'])
+        if qty <= 0:
+            continue
+        # stop del lado correcto: bajo el precio para LONG, sobre el precio para SHORT
+        if lado == 'LONG':
+            trigger = _redondear(p['mark'] * (1 - stop_pct), info['price_step'], info['price_precision'])
+            cierre = 'SELL'
+        else:
+            trigger = _redondear(p['mark'] * (1 + stop_pct), info['price_step'], info['price_precision'])
+            cierre = 'BUY'
+        try:
+            aid = _algo_stop(symbol, cierre, lado, 'STOP_MARKET', trigger, qty)
+            puestos.append({'side': lado, 'qty': qty, 'trigger': trigger, 'algoId': aid})
+            log.warning("testnet: RED DE SEGURIDAD %s %s BNB sin stop -> STOP @ %s",
+                        lado, qty, trigger)
+        except ErrorEjecucion:
+            # Si el stop de emergencia se dispararía ya, cerrar esa cantidad a mercado
+            log.exception("red de seguridad: stop falló, cierro %s a mercado", qty)
+            cerrar_a_mercado(symbol, 'BUY' if lado == 'LONG' else 'SELL', qty, lado)
+            puestos.append({'side': lado, 'qty': qty, 'cerrado_a_mercado': True})
+    return puestos
+
+
 def pnl_realizado(symbol, desde_ms, hasta_ms=None):
     """P&L REAL según el exchange en la ventana [desde_ms, hasta_ms]: suma de
     realizedPnl menos comisiones de los trades del símbolo.
