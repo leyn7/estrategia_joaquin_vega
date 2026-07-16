@@ -14,10 +14,11 @@ backtest. El espejo en el exchange (testnet) vive en mdt_testnet (auditoría 16
 jul: antes estaba todo aquí, 422 líneas mezclando dos mundos).
 
 CANDADO REGLA 3 (conectado 16 jul — estaba escrito y nadie lo llamaba): el mapa
-es la única fuente de anclas; si el ancla de un setup MUERE (138.2 / desgrane /
-evolución), el setup se cancela aunque el patrón siga dibujado. Se aplica en dos
-puntos: al registrar un gatillo nuevo y, cada ciclo, sobre las operaciones
-abiertas.
+es la única fuente de anclas, y el candado vigila LA PUERTA: un gatillo nuevo
+cuya ancla ya no es un ciclo VIVO del mapa no se opera. Solo la puerta (regla
+usuario 16 jul): "las posiciones, cuando se abren, ya solo dependen de su TP y
+su stop loss — ya no dependen de ningún ancla". Una operación abierta es un
+hecho con vida propia; la gobiernan su SL y su TP, no el mapa.
 """
 import logging
 
@@ -153,23 +154,11 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
         if testnet:
             mdt_testnet.abrir(sym, k, ops[k], ops, cuenta, chat_id)
 
-    # 2) Seguir cada operación no cerrada
+    # 2) Seguir cada operación no cerrada. OJO: aquí el candado NO entra — una
+    # posición abierta ya solo depende de su TP y su stop loss (regla usuario 16
+    # jul); el ancla solo importaba para ENTRAR.
     for k, op in list(ops.items()):
         if op.get('fase') in FASES_CERRADAS:
-            continue
-        # CANDADO Regla 3 en curso: si el ancla del setup murió en el mapa fresco,
-        # la operación se cancela aunque el patrón siga dibujado.
-        if mapa is not None and op.get('ancla') is not None \
-                and not ancla_viva(mapa, op['ancla'], tol=0.01):
-            if testnet and op.get('testnet'):
-                import mdt_testnet
-                mdt_testnet.cancelar(sym, k, op, cuenta, chat_id,
-                                     motivo=f"ancla {op['ancla']:.2f} muerta en el mapa")
-            else:
-                op['fase'] = 'CANCELADA'
-                op['r_final'] = 0.0
-            eventos.append(f"⚓💀 {sym} | CANDADO REGLA 3: {k} cancelada — su ancla "
-                           f"{op['ancla']:.2f} murió en el mapa (138.2/desgrane/evolución).")
             continue
         # En testnet, el cierre por SL/TP lo decide el EXCHANGE (reconciliación)
         if testnet and op.get('testnet'):

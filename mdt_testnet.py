@@ -8,7 +8,9 @@ Qué hace cada pieza, en el orden del ciclo del bot:
   reconciliar()        el cierre por SL/TP lo decide el EXCHANGE, no las velas
   abrir()              entrada + SL + TP nativos por cada gatillo nuevo
   parcial()            Secc 20: media fuera + stop a breakeven (sin quedar desnuda)
-  cancelar()           candado Regla 3: el ancla murió -> la operación se cancela
+
+El candado Regla 3 NO llega hasta aquí: vigila la PUERTA (mdt_ops) — una posición
+abierta ya solo depende de su TP y su stop loss (regla usuario 16 jul).
 """
 import logging
 import time
@@ -184,24 +186,6 @@ def reconciliar(sym, k, op, cuenta, chat_id):
               titulo=f"cerró por {fase} en el exchange",
               icono='🏁' if fase == 'TP' else '☠️')
     return True
-
-
-def cancelar(sym, k, op, cuenta, chat_id, motivo):
-    """CANDADO Regla 3 (conectado 16 jul): el ancla del setup murió en el mapa
-    (138.2 / desgrane / evolución) — "el setup debe cancelarse aunque el patrón
-    siga dibujado". Cierra a mercado lo vivo de ESTA operación y cancela sus
-    algos."""
-    t = op.get('testnet')
-    if t is not None:
-        try:
-            viva = t.get('cantidad_viva', t['cantidad'])
-            mdt_ejecutor.cancelar_ordenes(sym, t.get('algos'))
-            if viva and viva > 0:
-                mdt_ejecutor.cerrar_a_mercado(sym, op['lado'], viva, t['position_side'])
-        except Exception:  # noqa: BLE001 — la red de seguridad cubrirá el resto
-            log.exception("candado: fallo cancelando %s", k)
-    _liquidar(sym, k, op, cuenta, chat_id, 'CANCELADA', t,
-              titulo=f"CANCELADA por el candado Regla 3 ({motivo})", icono='⚓💀')
 
 
 def _liquidar(sym, k, op, cuenta, chat_id, fase, t, titulo, icono):
