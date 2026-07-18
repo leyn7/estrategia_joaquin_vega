@@ -174,6 +174,16 @@ def reconciliar(sym, k, op, cuenta, chat_id):
     algo_sl, algo_tp = t.get('algo_sl'), t.get('algo_tp')
     activos = [a for a in (algo_sl, algo_tp) if a]
     if not activos:
+        # Sin algos rastreados (p.ej. ambos dispararon en el mismo ciclo, o el
+        # parcial cerró por breakeven y el polvo se barrió): si el exchange ya no
+        # tiene posición de este lado, la operación TERMINÓ — sin esto quedaba
+        # fantasma en PARCIAL para siempre (caso SELL|602.79, 18 jul).
+        if t.get('cantidad_viva', t.get('cantidad', 0)) > 0:
+            pos = mdt_cartera.posiciones(sym)
+            if not any(p['side'] == t.get('position_side') for p in pos):
+                _liquidar(sym, k, op, cuenta, chat_id, 'BE', t,
+                          titulo="cerró en el exchange (posición ya plana)", icono='⚖️')
+                return True
         return False
     vivos = {str(x) for x in mdt_ejecutor.algos_abiertos(sym, activos)}
     if all(str(a) in vivos for a in activos):
