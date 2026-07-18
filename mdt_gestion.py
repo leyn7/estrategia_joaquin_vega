@@ -52,8 +52,10 @@ ESTADOS_EJECUTADOS_MUERTOS = ("ROTO_POR_STOP_LOSS", "ROTO_POR_DOBLE_TOQUE",
 
 # Fases terminales de una operación real (vivía en mdt_ops; aquí no crea ciclos
 # de import y la usan ops, testnet y los textos). CANCELADA = ancla muerta
-# (candado Regla 3, conectado 16 jul).
-FASES_CERRADAS = ('SL', 'BE', 'TP', 'CANCELADA')
+# (candado Regla 3). DESCARTADA = stop más fino que el mínimo rentable — se
+# registra por dedup pero JAMÁS se opera (regla usuario 16 jul: "la idea era que
+# esas no se tomaran; entrar todas = todas las que cumplan el stop del 0.5%").
+FASES_CERRADAS = ('SL', 'BE', 'TP', 'CANCELADA', 'DESCARTADA')
 
 
 def tp_cercano(lado, tp_zona):

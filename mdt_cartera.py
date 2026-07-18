@@ -131,6 +131,18 @@ def proteger_descubierto(symbol, stop_pct=0.005):
         lados_con_pos.add(lado)
         cob = cobertura_algos(symbol).get(lado, {})
         neto = abs(p['amt'])
+
+        # POLVO de redondeo (p.ej. 0.49 con parcial de 0.24+0.24 deja 0.01): no
+        # se le puede poner stop útil y queda flotando para siempre — se barre.
+        if neto <= paso * 1.01:
+            try:
+                cerrar_a_mercado(symbol, 'BUY' if lado == 'LONG' else 'SELL', neto, lado)
+                acciones.append({'side': lado, 'qty': neto, 'polvo_cerrado': True})
+                log.info("cartera: polvo %s %s cerrado", lado, neto)
+            except ErrorEjecucion:
+                log.exception("cartera: no se pudo cerrar el polvo %s", lado)
+            continue
+
         descubierto = neto - cob.get('sl', 0.0)
 
         if descubierto > paso:                       # FALTA stop -> proteger

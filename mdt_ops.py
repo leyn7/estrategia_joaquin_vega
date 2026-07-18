@@ -24,7 +24,7 @@ import logging
 
 import pandas as pd
 
-from mdt_config import MAX_OPS_DIA, MDT_MODO
+from mdt_config import MAX_OPS_DIA, MDT_MODO, MIN_RIESGO_PCT
 from mdt_data import to_cot
 from mdt_estado import MAX_OPS_CERRADAS, get_klines_vivo, naive
 from mdt_formato import hora_cot
@@ -146,6 +146,20 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
             eventos.append(f"⚓💀 {sym} | CANDADO REGLA 3: gatillo DESCARTADO — el ancla "
                            f"{op['ancla']:.2f} ya no es un ciclo vivo del mapa.\n"
                            f"  {op['lado']} {op['patron']} @ {op['entrada']:.2f} no se opera.")
+            continue
+        # COMPUERTA DEL STOP FINO (regla usuario 16 jul: "esa era la idea, que no
+        # se tomaran"). Un SL más cerca del MIN_RIESGO_PCT no es operable: para
+        # arriesgar $5 obliga a nocionales de miles y las comisiones se comen el
+        # riesgo. Datos de la semana: 14/18 señales eran finas y las 14 murieron
+        # en SL en minutos; las 4 sanas van bien. Se registra (dedup) pero NUNCA
+        # se opera ni va al exchange. El análisis la sigue mostrando con su aviso.
+        riesgo_pct = abs(op['entrada'] - op['sl']) / op['entrada'] if op['entrada'] else 0
+        if riesgo_pct < MIN_RIESGO_PCT:
+            ops[k] = {**op, 'fase': 'DESCARTADA', 'r_final': 0.0}
+            eventos.append(f"🚫 {sym} | STOP FINO: gatillo descartado — SL a "
+                           f"{riesgo_pct:.2%} del precio (mínimo {MIN_RIESGO_PCT:.2%}).\n"
+                           f"  {op['lado']} {op['patron']} @ {op['entrada']:.2f}: las "
+                           f"comisiones se comen el riesgo, no se opera.")
             continue
         ops[k] = {**op, 'fase': None}
         aviso = _aviso_limite_diario(sym, ops)
