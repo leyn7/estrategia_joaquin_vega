@@ -34,6 +34,7 @@ from mdt_estado import INTERVALO, RUTA_ESTADO, cargar_estado, guardar_estado
 from mdt_comandos import procesar_comandos
 from mdt_escaner import escanear_completo
 from mdt_eventos import detectar_eventos, vigilar_anclas, vigilar_rsi3m
+import mdt_vigia
 
 
 def escanear_simbolos(estado, tolerar_fallos=True):
@@ -54,6 +55,9 @@ def escanear_simbolos(estado, tolerar_fallos=True):
             resultado = escanear_completo(verbose=False, symbol=sym)
             for ev in detectar_eventos(sym, resultado, mem, cuenta, chat_id):
                 log.info("evento %s: %s", sym, ev.splitlines()[0])
+            # El vigía (modo sombra) refresca su tabla de niveles con este mapa:
+            # el escaneo completo es su auditor contra la deriva
+            mdt_vigia.actualizar_tabla(sym, resultado['mapa'])
         except Exception:  # noqa: BLE001 — el bucle jamás muere por un símbolo
             if not tolerar_fallos:
                 raise
@@ -101,12 +105,19 @@ def main():
         inicio = time.time()
         escanear_simbolos(estado)
         revisar_anclas(estado)
-        # Ventana de comandos hasta el próximo escaneo (long-poll de Telegram)
+        # Ventana de comandos hasta el próximo escaneo (long-poll de Telegram).
+        # Entre comandos, el VIGÍA late (~20s): compara el precio contra su tabla
+        # de niveles en memoria — modo sombra, solo bitácora (idea usuario 18 jul).
         while time.time() - inicio < INTERVALO:
             if mdt_telegram.TOKEN:
                 procesar_comandos(estado)
             else:
                 time.sleep(30)
+            for sym in list(estado['watchlist']):
+                try:
+                    mdt_vigia.paso(sym)
+                except Exception:  # noqa: BLE001 — la sombra jamás tumba al bot
+                    log.exception("latido del vigía %s", sym)
         guardar_estado(estado)
 
 
