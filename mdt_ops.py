@@ -24,7 +24,7 @@ import logging
 
 import pandas as pd
 
-from mdt_config import MAX_OPS_DIA, MDT_MODO, MIN_RIESGO_PCT
+from mdt_config import FRESCO_MIN, MAX_OPS_DIA, MDT_MODO, MIN_RIESGO_PCT
 from mdt_data import to_cot
 from mdt_estado import MAX_OPS_CERRADAS, get_klines_vivo, naive
 from mdt_formato import hora_cot
@@ -160,6 +160,23 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
                            f"{riesgo_pct:.2%} del precio (mínimo {MIN_RIESGO_PCT:.2%}).\n"
                            f"  {op['lado']} {op['patron']} @ {op['entrada']:.2f}: las "
                            f"comisiones se comen el riesgo, no se opera.")
+            continue
+        # COMPUERTA DE FRESCURA (bug 19 jul, alta de ETHUSDT): el primer escaneo
+        # de un símbolo nuevo relee TODO el episodio y "descubre" gatillos de hace
+        # horas o días — operarlos AHORA a mercado entra a un precio que ya no es
+        # el del patrón (3 ventas viejas de ETH entraron así a 1858 con gatillos
+        # de hasta 27h antes). Viejo se registra como histórico, no se opera.
+        try:
+            edad_min = (pd.Timestamp.now(tz='UTC').tz_localize(None)
+                        - naive(op['hora_gatillo'])).total_seconds() / 60.0
+        except Exception:  # noqa: BLE001 — sin hora legible, mejor no operar
+            edad_min = float('inf')
+        if edad_min > FRESCO_MIN:
+            ops[k] = {**op, 'fase': 'DESCARTADA', 'r_final': 0.0}
+            eventos.append(f"⌛ {sym} | GATILLO VIEJO: {op['lado']} {op['patron']} @ "
+                           f"{op['entrada']:.2f} disparó hace {edad_min/60:.1f}h "
+                           f"(máx {FRESCO_MIN:.0f} min). Se registra como histórico, "
+                           f"no se opera: el precio ya no es el del patrón.")
             continue
         ops[k] = {**op, 'fase': None}
         aviso = _aviso_limite_diario(sym, ops)

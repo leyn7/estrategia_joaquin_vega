@@ -89,6 +89,14 @@ COMISION_IDA_VUELTA = 2 * COMISION_LADO
 #   SL 0.35% -> 29%   |   SL 0.50% -> 20%   |   SL 1% -> 10%   |   SL 2% -> 5%
 MIN_RIESGO_PCT = 0.005
 
+# Frescura de un gatillo para OPERARLO (bug 19 jul, alta de ETHUSDT): el primer
+# escaneo de un símbolo relee todo el episodio y "descubre" gatillos de hace
+# horas o días; entrarlos a mercado AHORA es entrar a un precio que ya no es el
+# del patrón (3 ventas viejas de ETH entraron así). Más viejo que esto (minutos)
+# se registra como histórico pero JAMÁS se opera. 120 min cubre el patrón
+# operable más lento (1h: su gatillo puede conocerse hasta ~70 min después).
+FRESCO_MIN = float(os.environ.get('MDT_FRESCO_MIN', '120'))
+
 # --- Ejecución real (Testnet) — regla usuario 14 jul: "que operen como si
 # fueran reales, sin meter dinero" ---
 # 'observacion' (default): el bot sigue exactamente igual que siempre, esta
