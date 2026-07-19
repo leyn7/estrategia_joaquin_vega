@@ -89,6 +89,20 @@ COMISION_IDA_VUELTA = 2 * COMISION_LADO
 #   SL 0.35% -> 29%   |   SL 0.50% -> 20%   |   SL 1% -> 10%   |   SL 2% -> 5%
 MIN_RIESGO_PCT = 0.005
 
+# Mínimo POR SÍMBOLO (regla usuario 19 jul): el suelo de las comisiones (0.5%)
+# es universal, pero el suelo del RUIDO es de cada activo — ETH es 1.25x más
+# volátil que BNB (rango diario 4.6% vs 3.6%, 60 días), así que su stop mínimo
+# escala igual: 0.5% × 1.25 ≈ 0.65%. El backtest de 2 meses apunta lo mismo
+# (tramo 0.5-1% en ETH: -18R netas; tramo 1-2%: +25R). La escala del stop
+# acompaña a la escala del instrumento.
+MIN_RIESGO_PCT_SIMBOLO = {"ETHUSDT": 0.0065}
+
+
+def min_riesgo_de(symbol):
+    """El stop mínimo operable del símbolo (su suelo de ruido, nunca por debajo
+    del suelo universal de comisiones)."""
+    return max(MIN_RIESGO_PCT_SIMBOLO.get(symbol, MIN_RIESGO_PCT), MIN_RIESGO_PCT)
+
 # Frescura de un gatillo para OPERARLO (bug 19 jul, alta de ETHUSDT): el primer
 # escaneo de un símbolo relee todo el episodio y "descubre" gatillos de hace
 # horas o días; entrarlos a mercado AHORA es entrar a un precio que ya no es el

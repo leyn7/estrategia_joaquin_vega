@@ -24,7 +24,7 @@ import logging
 
 import pandas as pd
 
-from mdt_config import FRESCO_MIN, MAX_OPS_DIA, MDT_MODO, MIN_RIESGO_PCT
+from mdt_config import FRESCO_MIN, MAX_OPS_DIA, MDT_MODO, min_riesgo_de
 from mdt_data import to_cot
 from mdt_estado import MAX_OPS_CERRADAS, get_klines_vivo, naive
 from mdt_formato import hora_cot
@@ -154,12 +154,13 @@ def actualizar_operaciones(sym, resultado, mem, cuenta=None, chat_id=None):
         # en SL en minutos; las 4 sanas van bien. Se registra (dedup) pero NUNCA
         # se opera ni va al exchange. El análisis la sigue mostrando con su aviso.
         riesgo_pct = abs(op['entrada'] - op['sl']) / op['entrada'] if op['entrada'] else 0
-        if riesgo_pct < MIN_RIESGO_PCT:
+        minimo = min_riesgo_de(sym)   # por símbolo: su suelo de ruido (ETH 0.65%)
+        if riesgo_pct < minimo:
             ops[k] = {**op, 'fase': 'DESCARTADA', 'r_final': 0.0}
             eventos.append(f"🚫 {sym} | STOP FINO: gatillo descartado — SL a "
-                           f"{riesgo_pct:.2%} del precio (mínimo {MIN_RIESGO_PCT:.2%}).\n"
-                           f"  {op['lado']} {op['patron']} @ {op['entrada']:.2f}: las "
-                           f"comisiones se comen el riesgo, no se opera.")
+                           f"{riesgo_pct:.2%} del precio (mínimo de {sym}: {minimo:.2%}).\n"
+                           f"  {op['lado']} {op['patron']} @ {op['entrada']:.2f}: "
+                           f"no cubre el ruido del activo, no se opera.")
             continue
         # COMPUERTA DE FRESCURA (bug 19 jul, alta de ETHUSDT): el primer escaneo
         # de un símbolo nuevo relee TODO el episodio y "descubre" gatillos de hace
